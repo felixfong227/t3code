@@ -12,7 +12,7 @@ import {
   type SourceControlRepositoryInfo,
 } from "@t3tools/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowDownIcon,
@@ -120,6 +120,7 @@ import { useSidebar } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
+import { canCollapseAppSidebar } from "./AppSidebarLayout.logic";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 const BROWSE_STALE_TIME_MS = 30_000;
@@ -394,6 +395,7 @@ function CommandPaletteDialog() {
 
 function OpenCommandPaletteDialog() {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { toggleSidebar } = useSidebar();
   const setOpen = useCommandPaletteStore((store) => store.setOpen);
   const openIntent = useCommandPaletteStore((store) => store.openIntent);
@@ -405,6 +407,7 @@ function OpenCommandPaletteDialog() {
   const queryClient = useQueryClient();
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
   const settings = useSettings();
+  const sidebarCanCollapse = canCollapseAppSidebar(pathname);
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
@@ -1053,17 +1056,19 @@ function OpenCommandPaletteDialog() {
     },
   });
 
-  actionItems.push({
-    kind: "action",
-    value: "action:toggle-sidebar",
-    searchTerms: ["sidebar", "toggle", "collapse", "hide", "show"],
-    title: "Toggle sidebar",
-    icon: <PanelLeftIcon className={ITEM_ICON_CLASS} />,
-    shortcutCommand: "sidebar.toggle",
-    run: async () => {
-      toggleSidebar();
-    },
-  });
+  if (sidebarCanCollapse) {
+    actionItems.push({
+      kind: "action",
+      value: "action:toggle-sidebar",
+      searchTerms: ["sidebar", "toggle", "collapse", "hide", "show"],
+      title: "Toggle sidebar",
+      icon: <PanelLeftIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "sidebar.toggle",
+      run: async () => {
+        toggleSidebar();
+      },
+    });
+  }
 
   actionItems.push({
     kind: "action",
