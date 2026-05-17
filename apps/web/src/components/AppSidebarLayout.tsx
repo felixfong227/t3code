@@ -1,8 +1,9 @@
 import { useEffect, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import ThreadSidebar from "./Sidebar";
-import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
+import { Sidebar, SidebarRail } from "./ui/sidebar";
+import { canCollapseAppSidebar } from "./AppSidebarLayout.logic";
 import {
   clearShortcutModifierState,
   syncShortcutModifierStateFromKeyboardEvent,
@@ -13,6 +14,8 @@ const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
 const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const sidebarCanCollapse = canCollapseAppSidebar(pathname);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -54,10 +57,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   return (
-    <SidebarProvider className="h-dvh! min-h-0!" defaultOpen>
+    <>
       <Sidebar
         side="left"
-        collapsible="offcanvas"
+        collapsible={sidebarCanCollapse ? "offcanvas" : "none"}
         className="border-r border-border bg-card text-foreground"
         resizable={{
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,
@@ -67,9 +70,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         }}
       >
         <ThreadSidebar />
-        <SidebarRail />
+        {sidebarCanCollapse ? <SidebarRail /> : null}
       </Sidebar>
       {children}
-    </SidebarProvider>
+    </>
   );
 }
