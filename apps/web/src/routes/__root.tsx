@@ -15,6 +15,7 @@ import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
+import { SidebarProvider } from "../components/ui/sidebar";
 import {
   SlowRpcAckToastCoordinator,
   WebSocketConnectionCoordinator,
@@ -122,11 +123,13 @@ function RootRouteView() {
   }
 
   const appShell = (
-    <CommandPalette>
-      <AppSidebarLayout>
-        <Outlet />
-      </AppSidebarLayout>
-    </CommandPalette>
+    <SidebarProvider className="h-dvh! min-h-0!" defaultOpen>
+      <CommandPalette>
+        <AppSidebarLayout>
+          <Outlet />
+        </AppSidebarLayout>
+      </CommandPalette>
+    </SidebarProvider>
   );
 
   return (
