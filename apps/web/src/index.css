@@ -469,6 +469,40 @@ label:has(> select#reasoning-effort) select {
   border-color: color-mix(in srgb, var(--border) 70%, var(--foreground));
 }
 
+.chat-markdown .chat-markdown-mermaid {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--muted) 70%, var(--background));
+  padding: 0.9rem;
+}
+
+.chat-markdown .chat-markdown-mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.chat-markdown .chat-markdown-mermaid-loading {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.chat-markdown .chat-markdown-mermaid-error {
+  border-color: color-mix(in srgb, var(--destructive) 45%, var(--border));
+  color: var(--foreground);
+}
+
+.chat-markdown .chat-markdown-mermaid-error pre {
+  margin: 0.5rem 0 0;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--destructive) 8%, var(--background));
+  color: var(--destructive);
+  white-space: pre-wrap;
+}
+
 .chat-markdown .chat-markdown-shiki .shiki {
   background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
 }

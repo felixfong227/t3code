@@ -13,6 +13,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useId,
   type ReactNode,
 } from "react";
 import type { Components } from "react-markdown";
@@ -74,12 +75,107 @@ const highlightedCodeCache = new LRUCache<string>(
   MAX_HIGHLIGHT_CACHE_MEMORY_BYTES,
 );
 const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
+let mermaidRenderQueue = Promise.resolve();
 
 function extractFenceLanguage(className: string | undefined): string {
   const match = className?.match(CODE_FENCE_LANGUAGE_REGEX);
   const raw = match?.[1] ?? "text";
   // Shiki doesn't bundle a gitignore grammar; ini is a close match (#685)
   return raw === "gitignore" ? "ini" : raw;
+}
+
+function isMermaidFenceLanguage(language: string): boolean {
+  return language === "mermaid" || language === "mmd";
+}
+
+function buildMermaidThemeVariables(theme: "light" | "dark"): Record<string, string> {
+  if (theme === "dark") {
+    return {
+      background: "transparent",
+      primaryColor: "#1f2937",
+      primaryTextColor: "#f9fafb",
+      primaryBorderColor: "#6b7280",
+      lineColor: "#d1d5db",
+      secondaryColor: "#111827",
+      secondaryTextColor: "#f9fafb",
+      secondaryBorderColor: "#4b5563",
+      tertiaryColor: "#374151",
+      tertiaryTextColor: "#f9fafb",
+      tertiaryBorderColor: "#6b7280",
+      textColor: "#f9fafb",
+      mainBkg: "#1f2937",
+      nodeBorder: "#6b7280",
+      clusterBkg: "#111827",
+      clusterBorder: "#4b5563",
+      edgeLabelBackground: "#111827",
+    };
+  }
+
+  return {
+    background: "transparent",
+    primaryColor: "#f8fafc",
+    primaryTextColor: "#111827",
+    primaryBorderColor: "#94a3b8",
+    lineColor: "#334155",
+    secondaryColor: "#eef2ff",
+    secondaryTextColor: "#111827",
+    secondaryBorderColor: "#94a3b8",
+    tertiaryColor: "#f1f5f9",
+    tertiaryTextColor: "#111827",
+    tertiaryBorderColor: "#cbd5e1",
+    textColor: "#111827",
+    mainBkg: "#f8fafc",
+    nodeBorder: "#94a3b8",
+    clusterBkg: "#f1f5f9",
+    clusterBorder: "#cbd5e1",
+    edgeLabelBackground: "#ffffff",
+  };
+}
+
+async function renderMermaidDiagram({
+  code,
+  id,
+  theme,
+}: {
+  code: string;
+  id: string;
+  theme: "light" | "dark";
+}): Promise<string> {
+  const render = async () => {
+    const { default: mermaid } = await import("mermaid");
+
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      maxTextSize: 50000,
+      maxEdges: 500,
+      theme: "base",
+      themeVariables: buildMermaidThemeVariables(theme),
+      flowchart: {
+        htmlLabels: false,
+        useMaxWidth: true,
+      },
+      sequence: {
+        useMaxWidth: true,
+      },
+      gantt: {
+        useMaxWidth: true,
+      },
+      er: {
+        useMaxWidth: true,
+      },
+    });
+
+    const result = await mermaid.render(id, code);
+    return result.svg;
+  };
+
+  const queuedRender = mermaidRenderQueue.then(render, render);
+  mermaidRenderQueue = queuedRender.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queuedRender;
 }
 
 function nodeToPlainText(node: ReactNode): string {
@@ -190,6 +286,76 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
         {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
       </button>
       {children}
+    </div>
+  );
+}
+
+interface MermaidDiagramProps {
+  code: string;
+  theme: "light" | "dark";
+}
+
+function MermaidDiagram({ code, theme }: MermaidDiagramProps) {
+  const reactId = useId();
+  const diagramId = useMemo(
+    () => `chat-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    [reactId],
+  );
+  const renderCounterRef = useRef(0);
+  const [renderState, setRenderState] = useState<
+    | { status: "loading"; svg: null; error: null }
+    | { status: "ready"; svg: string; error: null }
+    | { status: "error"; svg: null; error: string }
+  >({ status: "loading", svg: null, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    const renderId = `${diagramId}-${(renderCounterRef.current += 1)}`;
+    setRenderState({ status: "loading", svg: null, error: null });
+
+    void renderMermaidDiagram({ code, id: renderId, theme }).then(
+      (svg) => {
+        if (!cancelled) {
+          setRenderState({ status: "ready", svg, error: null });
+        }
+      },
+      (error) => {
+        if (!cancelled) {
+          setRenderState({
+            status: "error",
+            svg: null,
+            error: error instanceof Error ? error.message : "Unable to render Mermaid diagram.",
+          });
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, diagramId, theme]);
+
+  if (renderState.status === "ready") {
+    return (
+      <div
+        className="chat-markdown-mermaid"
+        dangerouslySetInnerHTML={{ __html: renderState.svg }}
+      />
+    );
+  }
+
+  if (renderState.status === "error") {
+    return (
+      <div className="chat-markdown-mermaid chat-markdown-mermaid-error" role="alert">
+        <div className="font-medium text-destructive">Unable to render Mermaid diagram.</div>
+        <pre>{renderState.error}</pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-markdown-mermaid chat-markdown-mermaid-loading" aria-live="polite">
+      Rendering diagram...
     </div>
   );
 }
@@ -584,6 +750,15 @@ function ChatMarkdown({
         const codeBlock = extractCodeBlock(children);
         if (!codeBlock) {
           return <pre {...props}>{children}</pre>;
+        }
+        const language = extractFenceLanguage(codeBlock.className);
+
+        if (!isStreaming && isMermaidFenceLanguage(language)) {
+          return (
+            <MarkdownCodeBlock code={codeBlock.code}>
+              <MermaidDiagram code={codeBlock.code.trim()} theme={resolvedTheme} />
+            </MarkdownCodeBlock>
+          );
         }
 
         return (
