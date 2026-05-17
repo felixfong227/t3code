@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SourceControlProviderError, type ChangeRequest } from "@t3tools/contracts";
+import { parseRepositoryPathFromRemoteUrl } from "@t3tools/shared/git";
 
 import * as GitLabCli from "./GitLabCli.ts";
 import * as SourceControlProvider from "./SourceControlProvider.ts";
@@ -87,14 +88,19 @@ export const discovery = {
 
 export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
   const gitlab = yield* GitLabCli.GitLabCli;
+  const repositoryFromContext = (
+    context: SourceControlProvider.SourceControlProviderContext | undefined,
+  ) => parseRepositoryPathFromRemoteUrl(context?.remoteUrl ?? null) ?? undefined;
 
   return SourceControlProvider.SourceControlProvider.of({
     kind: "gitlab",
     listChangeRequests: (input) => {
       const source = SourceControlProvider.sourceControlRefFromInput(input);
+      const repository = repositoryFromContext(input.context);
       return gitlab
         .listMergeRequests({
           cwd: input.cwd,
+          ...(repository ? { repository } : {}),
           headSelector: input.headSelector,
           ...(source ? { source } : {}),
           state: input.state,
@@ -112,9 +118,11 @@ export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
       ),
     createChangeRequest: (input) => {
       const source = SourceControlProvider.sourceControlRefFromInput(input);
+      const repository = repositoryFromContext(input.context);
       return gitlab
         .createMergeRequest({
           cwd: input.cwd,
+          ...(repository ? { repository } : {}),
           baseBranch: input.baseRefName,
           headSelector: input.headSelector,
           ...(source ? { source } : {}),
@@ -132,10 +140,15 @@ export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
       gitlab
         .createRepository(input)
         .pipe(Effect.mapError((error) => providerError("createRepository", error))),
-    getDefaultBranch: (input) =>
-      gitlab
-        .getDefaultBranch(input)
-        .pipe(Effect.mapError((error) => providerError("getDefaultBranch", error))),
+    getDefaultBranch: (input) => {
+      const repository = repositoryFromContext(input.context);
+      return gitlab
+        .getDefaultBranch({
+          cwd: input.cwd,
+          ...(repository ? { repository } : {}),
+        })
+        .pipe(Effect.mapError((error) => providerError("getDefaultBranch", error)));
+    },
     checkoutChangeRequest: (input) =>
       gitlab
         .checkoutMergeRequest(input)

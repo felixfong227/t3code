@@ -539,6 +539,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           args: [
             "pr",
             "list",
+            ...(input.repository ? ["--repo", input.repository] : []),
             "--head",
             input.headSelector,
             "--state",
@@ -562,6 +563,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           args: [
             "pr",
             "create",
+            ...(input.repository ? ["--repo", input.repository] : []),
             "--base",
             input.baseBranch,
             "--head",
@@ -575,7 +577,15 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       getDefaultBranch: (input) =>
         execute({
           cwd: input.cwd,
-          args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+          args: [
+            "repo",
+            "view",
+            ...(input.repository ? [input.repository] : []),
+            "--json",
+            "defaultBranchRef",
+            "--jq",
+            ".defaultBranchRef.name",
+          ],
         }).pipe(
           Effect.map((result) => {
             const value = result.stdout.trim();
@@ -624,6 +634,7 @@ function runStackedAction(
     commitMessage?: string;
     featureBranch?: boolean;
     filePaths?: readonly string[];
+    pullRequestTargetRemote?: "origin" | "upstream" | "default";
   },
   options?: Parameters<GitManagerShape["runStackedAction"]>[1],
 ) {
@@ -2454,11 +2465,78 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(result.pr.status).toBe("created");
       expect(result.pr.number).toBe(2305);
-      expect(
-        ghCalls.some((call) =>
-          call.includes("pr create --base main --head felixfong227:felix/integrate-pr-2305-1003"),
-        ),
-      ).toBe(true);
+      expect(ghCalls.join("\n")).toContain(
+        "pr create --repo pingdotgg/t3code --base main --head felixfong227:felix/integrate-pr-2305-1003",
+      );
+    }),
+  );
+
+  it.effect("creates PRs against origin when explicitly selected", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const forkDir = yield* createBareRemote();
+      const upstreamDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", forkDir]);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamDir]);
+      yield* runGit(repoDir, ["checkout", "-b", "felix/integrate-pr-2305-1003"]);
+      fs.writeFileSync(path.join(repoDir, "origin-target.txt"), "change\n");
+      yield* runGit(repoDir, ["add", "origin-target.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "felix/integrate-pr-2305-1003"]);
+      yield* configureVisibleRemoteUrlWithLocalRewrite(
+        repoDir,
+        "origin",
+        "git@github.com:felixfong227/t3code.git",
+        forkDir,
+      );
+      yield* configureVisibleRemoteUrlWithLocalRewrite(
+        repoDir,
+        "upstream",
+        "git@github.com:pingdotgg/t3code.git",
+        upstreamDir,
+      );
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequenceByHeadSelector: {
+            "felix/integrate-pr-2305-1003": [
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([
+                {
+                  number: 2306,
+                  title: "Add origin-target PR",
+                  url: "https://github.com/felixfong227/t3code/pull/2306",
+                  baseRefName: "main",
+                  headRefName: "felix/integrate-pr-2305-1003",
+                  state: "OPEN",
+                  isCrossRepository: false,
+                  headRepository: {
+                    nameWithOwner: "felixfong227/t3code",
+                  },
+                  headRepositoryOwner: {
+                    login: "felixfong227",
+                  },
+                },
+              ]),
+            ],
+          },
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+        pullRequestTargetRemote: "origin",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(result.pr.number).toBe(2306);
+      expect(ghCalls.join("\n")).toContain(
+        "pr create --repo felixfong227/t3code --base main --head felix/integrate-pr-2305-1003",
+      );
     }),
   );
 

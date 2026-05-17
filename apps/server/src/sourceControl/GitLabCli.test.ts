@@ -220,6 +220,111 @@ layer("GitLabCli.layer", (it) => {
     }),
   );
 
+  it.effect("lists merge requests against an explicit target repository", () =>
+    Effect.gen(function* () {
+      mockedRun.mockReturnValueOnce(Effect.succeed(processOutput("[]")));
+
+      const glab = yield* GitLabCli.GitLabCli;
+      yield* glab.listMergeRequests({
+        cwd: "/repo",
+        repository: "pingdotgg/t3code",
+        headSelector: "feature/provider",
+        state: "open",
+        limit: 5,
+      });
+
+      expect(mockedRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "glab",
+          cwd: "/repo",
+          args: [
+            "mr",
+            "list",
+            "--repo",
+            "pingdotgg/t3code",
+            "--source-branch",
+            "feature/provider",
+            "--per-page",
+            "5",
+            "--output",
+            "json",
+          ],
+        }),
+      );
+    }),
+  );
+
+  it.effect("creates merge requests against an explicit target repository", () =>
+    Effect.gen(function* () {
+      mockedRun.mockReturnValueOnce(Effect.succeed(processOutput("{}")));
+
+      const glab = yield* GitLabCli.GitLabCli;
+      yield* glab.createMergeRequest({
+        cwd: "/repo",
+        repository: "pingdotgg/t3code",
+        baseBranch: "main",
+        headSelector: "feature/provider",
+        source: {
+          refName: "feature/provider",
+          repository: "fork/t3code",
+        },
+        title: "Provider MR",
+        bodyFile: "/tmp/t3-mr-body.md",
+      });
+
+      expect(mockedRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "glab",
+          cwd: "/repo",
+          args: [
+            "api",
+            "--method",
+            "POST",
+            "projects/pingdotgg%2Ft3code/merge_requests",
+            "--raw-field",
+            "source_branch=feature/provider",
+            "--raw-field",
+            "target_branch=main",
+            "--raw-field",
+            "source_project_id=fork/t3code",
+            "--raw-field",
+            "title=Provider MR",
+            "--field",
+            "description=@/tmp/t3-mr-body.md",
+          ],
+        }),
+      );
+    }),
+  );
+
+  it.effect("reads the default branch from an explicit repository", () =>
+    Effect.gen(function* () {
+      mockedRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({ default_branch: "trunk" }),
+          ),
+        ),
+      );
+
+      const glab = yield* GitLabCli.GitLabCli;
+      const branch = yield* glab.getDefaultBranch({
+        cwd: "/repo",
+        repository: "pingdotgg/t3code",
+      });
+
+      assert.strictEqual(branch, "trunk");
+      expect(mockedRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "glab",
+          cwd: "/repo",
+          args: ["api", "projects/pingdotgg%2Ft3code"],
+        }),
+      );
+    }),
+  );
+
   it.effect("creates repositories under an explicit namespace", () =>
     Effect.gen(function* () {
       mockedRun

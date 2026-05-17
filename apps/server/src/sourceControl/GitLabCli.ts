@@ -53,6 +53,7 @@ export interface GitLabCliShape {
 
   readonly listMergeRequests: (input: {
     readonly cwd: string;
+    readonly repository?: string;
     readonly headSelector: string;
     readonly source?: SourceControlProvider.SourceControlRefSelector;
     readonly state: "open" | "closed" | "merged" | "all";
@@ -77,6 +78,7 @@ export interface GitLabCliShape {
 
   readonly createMergeRequest: (input: {
     readonly cwd: string;
+    readonly repository?: string;
     readonly baseBranch: string;
     readonly headSelector: string;
     readonly source?: SourceControlProvider.SourceControlRefSelector;
@@ -87,6 +89,7 @@ export interface GitLabCliShape {
 
   readonly getDefaultBranch: (input: {
     readonly cwd: string;
+    readonly repository?: string;
   }) => Effect.Effect<string | null, GitLabCliError>;
 
   readonly checkoutMergeRequest: (input: {
@@ -256,6 +259,15 @@ function parseRepositoryPath(repository: string): {
   return { namespacePath, projectPath };
 }
 
+function projectApiEndpoint(repository: string | undefined, suffix = ""): string {
+  const project = repository?.trim();
+  const base =
+    project && project.length > 0
+      ? `projects/${encodeURIComponent(project)}`
+      : "projects/:fullpath";
+  return suffix.length > 0 ? `${base}/${suffix}` : base;
+}
+
 export const make = Effect.fn("makeGitLabCli")(function* () {
   const process = yield* VcsProcess.VcsProcess;
 
@@ -278,6 +290,7 @@ export const make = Effect.fn("makeGitLabCli")(function* () {
         args: [
           "mr",
           "list",
+          ...(input.repository ? ["--repo", input.repository] : []),
           "--source-branch",
           sourceRefName(input),
           ...stateArgs(input.state),
@@ -409,7 +422,7 @@ export const make = Effect.fn("makeGitLabCli")(function* () {
           "api",
           "--method",
           "POST",
-          "projects/:fullpath/merge_requests",
+          projectApiEndpoint(input.repository, "merge_requests"),
           "--raw-field",
           `source_branch=${sourceRefName(input)}`,
           "--raw-field",
@@ -425,7 +438,7 @@ export const make = Effect.fn("makeGitLabCli")(function* () {
     getDefaultBranch: (input) =>
       execute({
         cwd: input.cwd,
-        args: ["api", "projects/:fullpath"],
+        args: ["api", projectApiEndpoint(input.repository)],
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
         Effect.flatMap((raw) =>

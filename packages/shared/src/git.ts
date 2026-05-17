@@ -145,6 +145,36 @@ export function parseGitHubRepositoryNameWithOwnerFromRemoteUrl(url: string | nu
   return repositoryNameWithOwner.length > 0 ? repositoryNameWithOwner : null;
 }
 
+function normalizeRepositoryPath(path: string): string | null {
+  const repositoryPath = path
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\.git$/i, "")
+    .trim();
+  return repositoryPath.includes("/") ? repositoryPath : null;
+}
+
+/**
+ * Best-effort parse of a hosted repository path from common git remote URL shapes.
+ * GitHub paths are usually `owner/repo`; GitLab paths may include nested groups.
+ */
+export function parseRepositoryPathFromRemoteUrl(url: string | null): string | null {
+  const trimmed = url?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (/^(?:ssh|https?|git):\/\//i.test(trimmed)) {
+    try {
+      return normalizeRepositoryPath(new URL(trimmed).pathname);
+    } catch {
+      return null;
+    }
+  }
+
+  const scpStyleHostAndPath = /^[^@\s]+@[^:/\s]+[:/]([^\s]+)$/i.exec(trimmed);
+  return normalizeRepositoryPath(scpStyleHostAndPath?.[1] ?? "");
+}
+
 function deriveLocalBranchNameCandidatesFromRemoteRef(
   branchName: string,
   remoteName?: string,

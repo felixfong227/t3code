@@ -37,6 +37,7 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "../ui/number-field";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -70,6 +71,12 @@ const VCS_ICONS: Partial<Record<VcsDriverKind, Icon>> = {
 
 const SOURCE_CONTROL_SKELETON_ROWS = ["primary", "secondary"] as const;
 const GIT_FETCH_INTERVAL_STEP_SECONDS = 5;
+const PULL_REQUEST_TARGET_REMOTE_LABELS = {
+  ask: "Ask each time",
+  default: "Default",
+  origin: "Origin",
+  upstream: "Upstream",
+} as const;
 
 function durationToSeconds(duration: Duration.Duration): number {
   return Math.round(Duration.toMillis(duration) / 1_000);
@@ -356,6 +363,84 @@ function GitFetchIntervalSettings() {
   );
 }
 
+function PullRequestTargetRemoteSettings() {
+  const pullRequestTargetRemotePreference = useSettings(
+    (settings) => settings.pullRequestTargetRemotePreference,
+  );
+  const { updateSettings } = useUpdateSettings();
+  const canReset =
+    pullRequestTargetRemotePreference !==
+    DEFAULT_UNIFIED_SETTINGS.pullRequestTargetRemotePreference;
+
+  return (
+    <div className="grid gap-3 border-t border-border/60 pt-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex min-w-0 items-center gap-1">
+            <span className="text-xs font-medium text-foreground">Pull request target</span>
+            <span
+              className={cn(
+                "inline-flex size-5 shrink-0 items-center justify-center transition-opacity",
+                canReset ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+              aria-hidden={!canReset}
+            >
+              {canReset ? (
+                <SettingResetButton
+                  label="pull request target"
+                  onClick={() =>
+                    updateSettings({
+                      pullRequestTargetRemotePreference:
+                        DEFAULT_UNIFIED_SETTINGS.pullRequestTargetRemotePreference,
+                    })
+                  }
+                />
+              ) : null}
+            </span>
+          </div>
+          <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+            Choose the remote repository used when creating pull requests from repositories with
+            both origin and upstream remotes.
+          </p>
+        </div>
+        <Select
+          value={pullRequestTargetRemotePreference}
+          onValueChange={(value) => {
+            if (
+              value === "ask" ||
+              value === "default" ||
+              value === "origin" ||
+              value === "upstream"
+            ) {
+              updateSettings({ pullRequestTargetRemotePreference: value });
+            }
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-40" aria-label="Pull request target preference">
+            <SelectValue>
+              {PULL_REQUEST_TARGET_REMOTE_LABELS[pullRequestTargetRemotePreference]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            <SelectItem hideIndicator value="ask">
+              Ask each time
+            </SelectItem>
+            <SelectItem hideIndicator value="default">
+              Default
+            </SelectItem>
+            <SelectItem hideIndicator value="origin">
+              Origin
+            </SelectItem>
+            <SelectItem hideIndicator value="upstream">
+              Upstream
+            </SelectItem>
+          </SelectPopup>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 function SourceControlSectionSkeleton({
   title,
   headerAction,
@@ -479,7 +564,12 @@ export function SourceControlSettingsPanel() {
             <SettingsSection title="Version Control" headerAction={scanButton}>
               {result.versionControlSystems.map((item) => (
                 <DiscoveryItemRow key={`vcs:${item.kind}`} item={item}>
-                  {item.kind === "git" ? <GitFetchIntervalSettings /> : undefined}
+                  {item.kind === "git" ? (
+                    <>
+                      <GitFetchIntervalSettings />
+                      <PullRequestTargetRemoteSettings />
+                    </>
+                  ) : undefined}
                 </DiscoveryItemRow>
               ))}
             </SettingsSection>
