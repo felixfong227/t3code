@@ -141,6 +141,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
       planSidebarLabel="Plan"
       planSidebarOpen={false}
       runtimeMode="approval-required"
+      runtimeModeOptions={["approval-required", "auto-accept-edits", "full-access"]}
       showInteractionModeToggle
       traitsMenuContent={
         <TraitsMenuContent
@@ -303,6 +304,7 @@ describe("CompactComposerControlsMenu", () => {
         planSidebarLabel="Plan"
         planSidebarOpen={false}
         runtimeMode="approval-required"
+        runtimeModeOptions={["approval-required", "auto-accept-edits", "full-access"]}
         showInteractionModeToggle={false}
         onToggleInteractionMode={vi.fn()}
         onTogglePlanSidebar={vi.fn()}
@@ -320,7 +322,42 @@ describe("CompactComposerControlsMenu", () => {
       expect(text).not.toContain("Plan");
       expect(text).toContain("Access");
       expect(text).toContain("Supervised");
+      expect(text).not.toContain("Auto-review");
       expect(text).toContain("Full access");
+    });
+
+    await screen.unmount();
+    host.remove();
+  });
+
+  it("shows Codex Auto-review only when provided as an access option", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(
+      <CompactComposerControlsMenu
+        activePlan={false}
+        interactionMode="default"
+        planSidebarLabel="Plan"
+        planSidebarOpen={false}
+        runtimeMode="approval-required"
+        runtimeModeOptions={[
+          "approval-required",
+          "codex-auto-review",
+          "auto-accept-edits",
+          "full-access",
+        ]}
+        showInteractionModeToggle={false}
+        onToggleInteractionMode={vi.fn()}
+        onTogglePlanSidebar={vi.fn()}
+        onRuntimeModeChange={vi.fn()}
+      />,
+      { container: host },
+    );
+
+    await page.getByLabelText("More composer controls").click();
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent ?? "").toContain("Auto-review");
     });
 
     await screen.unmount();

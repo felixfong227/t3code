@@ -124,6 +124,42 @@ describe("buildTurnStartParams", () => {
     });
   });
 
+  it("routes Codex auto-review through the app-server approvals reviewer", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "codex-auto-review",
+        prompt: "Implement with automatic review",
+        model: "gpt-5.3-codex",
+        interactionMode: "default",
+      }),
+    );
+
+    assert.deepStrictEqual(params, {
+      threadId: "provider-thread-1",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      sandboxPolicy: {
+        type: "workspaceWrite",
+      },
+      input: [
+        {
+          type: "text",
+          text: "Implement with automatic review",
+        },
+      ],
+      model: "gpt-5.3-codex",
+      collaborationMode: {
+        mode: "default",
+        settings: {
+          model: "gpt-5.3-codex",
+          reasoning_effort: "medium",
+          developer_instructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+        },
+      },
+    });
+  });
+
   it("omits collaboration mode when interaction mode is absent", () => {
     const params = Effect.runSync(
       buildTurnStartParams({
@@ -197,6 +233,57 @@ describe("isRecoverableThreadResumeError", () => {
 });
 
 describe("openCodexThread", () => {
+  it("passes Codex auto-review reviewer on thread start", async () => {
+    const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];
+    const client = {
+      request: <M extends "thread/start" | "thread/resume">(
+        method: M,
+        payload: CodexRpc.ClientRequestParamsByMethod[M],
+      ) => {
+        if (method === "thread/resume") {
+          return Effect.fail(
+            new CodexErrors.CodexAppServerRequestError({
+              code: -32603,
+              errorMessage: "thread not found",
+            }),
+          );
+        }
+        calls.push({ method, payload });
+        return Effect.succeed(
+          makeThreadOpenResponse(
+            "auto-review-thread",
+          ) as CodexRpc.ClientRequestResponsesByMethod[M],
+        );
+      },
+    };
+
+    const opened = await Effect.runPromise(
+      openCodexThread({
+        client,
+        threadId: ThreadId.make("thread-1"),
+        runtimeMode: "codex-auto-review",
+        cwd: "/tmp/project",
+        requestedModel: "gpt-5.3-codex",
+        serviceTier: undefined,
+        resumeThreadId: undefined,
+      }),
+    );
+
+    assert.equal(opened.thread.id, "auto-review-thread");
+    assert.deepStrictEqual(calls, [
+      {
+        method: "thread/start",
+        payload: {
+          cwd: "/tmp/project",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
+          sandbox: "workspace-write",
+          model: "gpt-5.3-codex",
+        },
+      },
+    ]);
+  });
+
   it("falls back to thread/start when resume fails recoverably", async () => {
     const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];
     const started = makeThreadOpenResponse("fresh-thread");
