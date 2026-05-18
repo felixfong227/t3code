@@ -103,6 +103,7 @@ describe("applyGitStatusStreamEvent", () => {
         baseUrl: "https://github.com",
       },
       hasPrimaryRemote: true,
+      pullRequestTargetRemotes: ["origin", "upstream"],
       isDefaultRef: false,
       refName: "feature/demo",
       hasWorkingTreeChanges: true,
