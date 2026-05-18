@@ -85,6 +85,7 @@ export interface GitLabCliShape {
     readonly target?: SourceControlProvider.SourceControlRefSelector;
     readonly title: string;
     readonly bodyFile: string;
+    readonly draft?: boolean;
   }) => Effect.Effect<void, GitLabCliError>;
 
   readonly getDefaultBranch: (input: {
@@ -160,6 +161,17 @@ function normalizeGitLabCliError(operation: "execute" | "stdout", error: unknown
     detail: "GitLab CLI command failed.",
     cause: error,
   });
+}
+
+function draftMergeRequestTitle(title: string, draft: boolean | undefined): string {
+  if (!draft) {
+    return title;
+  }
+  const trimmed = title.trim();
+  if (/^(?:draft:|\[draft\]|\(draft\))/iu.test(trimmed)) {
+    return title;
+  }
+  return "Draft: " + trimmed;
 }
 
 const RawGitLabRepositoryCloneUrlsSchema = Schema.Struct({
@@ -429,7 +441,7 @@ export const make = Effect.fn("makeGitLabCli")(function* () {
           `target_branch=${input.target?.refName ?? input.baseBranch}`,
           ...(sourceProject ? ["--raw-field", `source_project_id=${sourceProject}`] : []),
           "--raw-field",
-          `title=${input.title}`,
+          `title=${draftMergeRequestTitle(input.title, input.draft)}`,
           "--field",
           `description=@${input.bodyFile}`,
         ],

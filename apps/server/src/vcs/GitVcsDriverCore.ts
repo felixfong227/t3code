@@ -37,6 +37,7 @@ const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
 const RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
 const RANGE_DIFF_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
 const RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES = 59_000;
+const RECENT_COMMIT_STYLE_MAX_OUTPUT_BYTES = 12_000;
 const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_FAILURE_COOLDOWN = Duration.seconds(5);
@@ -272,6 +273,25 @@ function parseTrackingBranchByUpstreamRef(stdout: string, upstreamRef: string): 
   }
 
   return null;
+}
+
+function isNoCommitHistoryError(stderr: string): boolean {
+  const normalized = stderr.toLowerCase();
+  return (
+    normalized.includes("does not have any commits yet") ||
+    normalized.includes("your current branch") ||
+    normalized.includes("unknown revision") ||
+    normalized.includes("bad revision") ||
+    normalized.includes("ambiguous argument")
+  );
+}
+
+function normalizeRecentCommitStyle(stdout: string): string {
+  return stdout
+    .split("\x1e")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .join("\n\n---\n\n");
 }
 
 function deriveLocalBranchNameFromRemoteRef(branchName: string): string | null {
@@ -1636,6 +1656,37 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       Effect.map((trimmed) => (trimmed.length > 0 ? trimmed : null)),
     );
 
+  const readRecentCommitStyle: GitVcsDriver.GitVcsDriverShape["readRecentCommitStyle"] = Effect.fn(
+    "readRecentCommitStyle",
+  )(function* (cwd, limit = 25) {
+    const normalizedLimit = Math.max(1, Math.min(100, Math.round(limit)));
+    const args = [
+      "log",
+      "--no-merges",
+      "-n",
+      String(normalizedLimit),
+      "--pretty=format:%s%n%b%x1e",
+    ];
+    const result = yield* executeGit("GitVcsDriver.readRecentCommitStyle", cwd, args, {
+      allowNonZeroExit: true,
+      maxOutputBytes: RECENT_COMMIT_STYLE_MAX_OUTPUT_BYTES,
+      appendTruncationMarker: true,
+    });
+    if (result.exitCode !== 0) {
+      if (isNoCommitHistoryError(result.stderr)) {
+        return "";
+      }
+      return yield* createGitCommandError(
+        "GitVcsDriver.readRecentCommitStyle",
+        cwd,
+        args,
+        result.stderr.trim() || "git log failed with code " + (result.exitCode ?? "null") + ".",
+      );
+    }
+    const normalized = normalizeRecentCommitStyle(result.stdout);
+    return result.stdoutTruncated ? normalized + OUTPUT_TRUNCATED_MARKER : normalized;
+  });
+
   const listRefs: GitVcsDriver.GitVcsDriverShape["listRefs"] = Effect.fn("listRefs")(
     function* (input) {
       const branchRecencyPromise = readBranchRecency(input.cwd).pipe(
@@ -2124,6 +2175,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     pushCurrentBranch,
     pullCurrentBranch,
     readRangeContext,
+    readRecentCommitStyle,
     readConfigValue,
     listRefs,
     createWorktree,

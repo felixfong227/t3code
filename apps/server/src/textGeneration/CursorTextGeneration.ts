@@ -183,6 +183,7 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       stagedSummary: input.stagedSummary,
       stagedPatch: input.stagedPatch,
       includeBranch: input.includeBranch === true,
+      policy: input.policy,
     });
 
     const generated = yield* runCursorJson({
@@ -211,6 +212,7 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       commitSummary: input.commitSummary,
       diffSummary: input.diffSummary,
       diffPatch: input.diffPatch,
+      policy: input.policy,
     });
 
     const generated = yield* runCursorJson({

@@ -129,6 +129,7 @@ export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
           ...(input.target ? { target: input.target } : {}),
           title: input.title,
           bodyFile: input.bodyFile,
+          ...(input.draft !== undefined ? { draft: input.draft } : {}),
         })
         .pipe(Effect.mapError((error) => providerError("createChangeRequest", error)));
     },

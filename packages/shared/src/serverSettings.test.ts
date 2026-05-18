@@ -194,4 +194,31 @@ describe("serverSettings helpers", () => {
       config: { homePath: "~/.codex" },
     });
   });
+
+  it("deep merges git automation patches without dropping sibling settings", () => {
+    const current = {
+      ...DEFAULT_SERVER_SETTINGS,
+      gitAutomation: {
+        ...DEFAULT_SERVER_SETTINGS.gitAutomation,
+        draftPullRequests: false,
+        commitStyleInstructions: "Use TICKET: subject.",
+        pullRequestTitleInstructions: "Keep titles sentence case.",
+      },
+    };
+
+    expect(
+      applyServerSettingsPatch(current, {
+        gitAutomation: {
+          followCommitHistory: false,
+          pullRequestDescriptionInstructions: "Include rollout notes.",
+        },
+      }).gitAutomation,
+    ).toEqual({
+      followCommitHistory: false,
+      draftPullRequests: false,
+      commitStyleInstructions: "Use TICKET: subject.",
+      pullRequestTitleInstructions: "Keep titles sentence case.",
+      pullRequestDescriptionInstructions: "Include rollout notes.",
+    });
+  });
 });

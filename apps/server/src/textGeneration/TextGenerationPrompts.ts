@@ -17,6 +17,14 @@ function policyInstruction(instruction: string | undefined): ReadonlyArray<strin
   return trimmed ? ["", "Additional instructions:", limitSection(trimmed, 4_000)] : [];
 }
 
+function namedPolicyInstruction(
+  title: string,
+  instruction: string | undefined,
+): ReadonlyArray<string> {
+  const trimmed = instruction?.trim();
+  return trimmed ? ["", title + ":", limitSection(trimmed, 4_000)] : [];
+}
+
 // ---------------------------------------------------------------------------
 // Commit message
 // ---------------------------------------------------------------------------
@@ -38,12 +46,14 @@ export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
       ? "Return a JSON object with keys: subject, body, branch."
       : "Return a JSON object with keys: subject, body.",
     "Rules:",
-    "- subject must be imperative, <= 72 chars, and no trailing period",
+    "- prefer the repository's established commit style when examples are available",
+    "- if no repository style is available, use a concise imperative subject",
     "- body can be empty string or short bullet points",
     ...(wantsBranch
       ? ["- branch must be a short semantic git branch fragment for this change"]
       : []),
     "- capture the primary user-visible or developer-visible change",
+    ...namedPolicyInstruction("Recent commit examples", input.policy?.commitHistory),
     ...policyInstruction(input.policy?.commitInstructions),
     "",
     `Branch: ${input.branch ?? "(detached)"}`,
@@ -97,6 +107,14 @@ export function buildPrContentPrompt(input: PrContentPromptInput) {
     "- body must be markdown and include headings '## Summary' and '## Testing'",
     "- under Summary, provide short bullet points",
     "- under Testing, include bullet points with concrete checks or 'Not run' where appropriate",
+    ...namedPolicyInstruction(
+      "Pull request title instructions",
+      input.policy?.changeRequestTitleInstructions,
+    ),
+    ...namedPolicyInstruction(
+      "Pull request description instructions",
+      input.policy?.changeRequestDescriptionInstructions,
+    ),
     ...policyInstruction(input.policy?.changeRequestInstructions),
     "",
     `Base branch: ${input.baseBranch}`,

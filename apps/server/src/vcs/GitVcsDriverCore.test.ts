@@ -310,6 +310,35 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.notInclude(status, "a.txt");
       }),
     );
+
+    it.effect("reads recent non-merge commit style examples", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, "a.txt", "a\n");
+        yield* git(cwd, ["add", "a.txt"]);
+        yield* git(cwd, ["commit", "-m", "feat(ui): add compact toolbar", "-m", "Body line"]);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        const style = yield* driver.readRecentCommitStyle(cwd);
+
+        assert.include(style, "feat(ui): add compact toolbar");
+        assert.include(style, "Body line");
+        assert.include(style, "initial commit");
+      }),
+    );
+
+    it.effect("returns empty recent commit style for an empty repository", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* driver.initRepo({ cwd });
+
+        const style = yield* driver.readRecentCommitStyle(cwd);
+
+        assert.equal(style, "");
+      }),
+    );
   });
 
   describe("remote operations", () => {

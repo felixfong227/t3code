@@ -344,6 +344,17 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+export const GitAutomationSettings = Schema.Struct({
+  followCommitHistory: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  draftPullRequests: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  commitStyleInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  pullRequestTitleInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  pullRequestDescriptionInstructions: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed("")),
+  ),
+});
+export type GitAutomationSettings = typeof GitAutomationSettings.Type;
+
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 
 export const ServerSettings = Schema.Struct({
@@ -390,6 +401,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  gitAutomation: GitAutomationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -467,6 +479,15 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
       otlpMetricsUrl: Schema.optionalKey(TrimmedString),
+    }),
+  ),
+  gitAutomation: Schema.optionalKey(
+    Schema.Struct({
+      followCommitHistory: Schema.optionalKey(Schema.Boolean),
+      draftPullRequests: Schema.optionalKey(Schema.Boolean),
+      commitStyleInstructions: Schema.optionalKey(TrimmedString),
+      pullRequestTitleInstructions: Schema.optionalKey(TrimmedString),
+      pullRequestDescriptionInstructions: Schema.optionalKey(TrimmedString),
     }),
   ),
   providers: Schema.optionalKey(

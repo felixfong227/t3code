@@ -267,6 +267,60 @@ describe("GitHubCli.layer", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("creates draft pull requests when requested", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput("")));
+
+      const gh = yield* GitHubCli.GitHubCli;
+      yield* gh.createPullRequest({
+        cwd: "/repo",
+        baseBranch: "main",
+        headSelector: "feature/style",
+        title: "Add style controls",
+        bodyFile: "/tmp/body.md",
+        draft: true,
+      });
+
+      expect(mockRun).toHaveBeenCalledWith({
+        operation: "GitHubCli.execute",
+        command: "gh",
+        args: [
+          "pr",
+          "create",
+          "--base",
+          "main",
+          "--head",
+          "feature/style",
+          "--title",
+          "Add style controls",
+          "--body-file",
+          "/tmp/body.md",
+          "--draft",
+        ],
+        cwd: "/repo",
+        timeoutMs: 30_000,
+      });
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("creates non-draft pull requests by default", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput("")));
+
+      const gh = yield* GitHubCli.GitHubCli;
+      yield* gh.createPullRequest({
+        cwd: "/repo",
+        baseBranch: "main",
+        headSelector: "feature/style",
+        title: "Add style controls",
+        bodyFile: "/tmp/body.md",
+      });
+
+      const call = mockRun.mock.calls[0]?.[0];
+      expect(call?.args).not.toContain("--draft");
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("surfaces a friendly error when the pull request is not found", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(

@@ -11,7 +11,10 @@ export type TextGenerationPolicyKind = typeof TextGenerationPolicyKind.Type;
 export const TextGenerationPolicy = Schema.Struct({
   kind: TextGenerationPolicyKind,
   commitInstructions: Schema.optional(Schema.String),
+  commitHistory: Schema.optional(Schema.String),
   changeRequestInstructions: Schema.optional(Schema.String),
+  changeRequestTitleInstructions: Schema.optional(Schema.String),
+  changeRequestDescriptionInstructions: Schema.optional(Schema.String),
   branchInstructions: Schema.optional(Schema.String),
   threadTitleInstructions: Schema.optional(Schema.String),
   inferRepositoryConventions: Schema.Boolean,
