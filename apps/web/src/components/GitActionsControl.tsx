@@ -101,6 +101,7 @@ interface PendingDefaultBranchAction {
   action: DefaultBranchConfirmableAction;
   branchName: string;
   includesCommit: boolean;
+  pullRequestTargetRemote?: GitPullRequestTargetRemote;
   commitMessage?: string;
   onConfirmed?: () => void;
   filePaths?: string[];
@@ -1333,6 +1334,9 @@ export default function GitActionsControl({
           action,
           branchName: actionBranch,
           includesCommit,
+          ...(resolvedPullRequestTargetRemote
+            ? { pullRequestTargetRemote: resolvedPullRequestTargetRemote }
+            : {}),
           ...(commitMessage ? { commitMessage } : {}),
           ...(onConfirmed ? { onConfirmed } : {}),
           ...(filePaths ? { filePaths } : {}),
@@ -1531,26 +1535,30 @@ export default function GitActionsControl({
 
   const continuePendingDefaultBranchAction = () => {
     if (!pendingDefaultBranchAction) return;
-    const { action, commitMessage, onConfirmed, filePaths } = pendingDefaultBranchAction;
+    const { action, commitMessage, onConfirmed, filePaths, pullRequestTargetRemote } =
+      pendingDefaultBranchAction;
     setPendingDefaultBranchAction(null);
     void runGitActionWithToast({
       action,
       ...(commitMessage ? { commitMessage } : {}),
       ...(onConfirmed ? { onConfirmed } : {}),
       ...(filePaths ? { filePaths } : {}),
+      ...(pullRequestTargetRemote ? { pullRequestTargetRemote } : {}),
       skipDefaultBranchPrompt: true,
     });
   };
 
   const checkoutFeatureBranchAndContinuePendingAction = () => {
     if (!pendingDefaultBranchAction) return;
-    const { action, commitMessage, onConfirmed, filePaths } = pendingDefaultBranchAction;
+    const { action, commitMessage, onConfirmed, filePaths, pullRequestTargetRemote } =
+      pendingDefaultBranchAction;
     setPendingDefaultBranchAction(null);
     void runGitActionWithToast({
       action,
       ...(commitMessage ? { commitMessage } : {}),
       ...(onConfirmed ? { onConfirmed } : {}),
       ...(filePaths ? { filePaths } : {}),
+      ...(pullRequestTargetRemote ? { pullRequestTargetRemote } : {}),
       featureBranch: true,
       skipDefaultBranchPrompt: true,
     });
