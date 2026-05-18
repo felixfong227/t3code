@@ -1,63 +1,64 @@
-# T3 Code
+# T3 Code Fork
 
-T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, and OpenCode, more coming soon).
+This repository is a fork of upstream [T3 Code](https://github.com/pingdotgg/t3code).
 
-## Installation
+The purpose of this fork is to add and maintain the features I want on top of upstream T3 Code. Upstream remains the base project, and this fork will track upstream versions while adding fork-controlled releases.
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, and OpenCode.
-> Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+## Fork Features
 
-### Run without installing
+Fork-specific implementations are not intended to compete with upstream forever. If upstream T3 Code adds the same feature, or a similar-enough implementation that solves the same problem, this fork should prefer the upstream version and remove the fork-specific implementation.
 
-```bash
-npx t3
+- Draft diff context comments for turn diffs ([#1](https://github.com/felixfong227/t3code/pull/1)) (Tracking [#79](https://github.com/pingdotgg/t3code/issues/79) and [#1003](https://github.com/pingdotgg/t3code/pull/1003)).
+- Collapsible sidebar toggle with keyboard shortcut support ([#1](https://github.com/felixfong227/t3code/pull/1)) (Tracking [#2282](https://github.com/pingdotgg/t3code/issues/2282) and [#2011](https://github.com/pingdotgg/t3code/pull/2011)).
+- Mermaid diagram rendering in chat markdown ([#2](https://github.com/felixfong227/t3code/pull/2)) (Tracking [#2250](https://github.com/pingdotgg/t3code/issues/2250)).
+- Fork-aware PR/MR target selection ([#3](https://github.com/felixfong227/t3code/pull/3)).
+- Automation style settings and PR target handling ([#4](https://github.com/felixfong227/t3code/pull/4)) (Tracking [#2123](https://github.com/pingdotgg/t3code/pull/2123)).
+- Auto-review runtime mode for Codex sessions ([#5](https://github.com/felixfong227/t3code/pull/5)) (Tracking [#2384](https://github.com/pingdotgg/t3code/issues/2384)).
+- Change request numbers surfaced in thread navigation ([#6](https://github.com/felixfong227/t3code/pull/6)).
+
+## Versioning
+
+Release versions in this fork follow upstream's semantic version as the first part of the tag, then add a fork-controlled CalVer date and revision number.
+
+Format:
+
+```text
+v<upstream-semver>.<YYYYMMDD>.<revision>
 ```
 
-### Desktop app
+Examples:
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
-
-#### Windows (`winget`)
-
-```bash
-winget install T3Tools.T3Code
+```text
+v0.0.24.20260519.1
+v0.0.24.20260519.2
+v0.0.24.20260519.3
 ```
 
-#### macOS (Homebrew)
+In these examples:
+
+- `0.0.24` follows the upstream T3 Code version.
+- `20260519` is the fork release date.
+- `1`, `2`, and `3` are fork-controlled revision numbers for that date.
+
+## Development
 
 ```bash
-brew install --cask t3-code
+bun install
+
+T3_DEV_HOME="$(mktemp -d "$PWD/.t3-dev.XXXXXX")"
+
+mkdir -p "$T3_DEV_HOME/dev"
+rsync -a \
+  --exclude 'attachments' \
+  --exclude 'state.sqlite-shm' \
+  --exclude 'state.sqlite-wal' \
+  "$HOME/.t3/userdata/" "$T3_DEV_HOME/dev/"
+
+T3CODE_HOME="$T3_DEV_HOME" bun run dev:desktop
 ```
 
-#### Arch Linux (AUR)
+## Building Artifacts
 
 ```bash
-yay -S t3code-bin
+bun run dist:desktop:artifact
 ```
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are not accepting contributions yet.
-
-Observability guide: [docs/observability.md](./docs/observability.md)
-
-## If you REALLY want to contribute still.... read this first
-
-Before local development, prepare the environment and install dependencies:
-
-```bash
-# Optional: only needed if you use mise for dev tool management.
-mise install
-bun install .
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
