@@ -2,6 +2,7 @@ import { TextGenerationError } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 const isTextGenerationError = Schema.is(TextGenerationError);
+const MAX_COMMIT_SUBJECT_LENGTH = 200;
 
 /** Convert an Effect Schema to a flat JSON Schema object, inlining `$defs` when present. */
 export function toJsonSchemaObject(schema: Schema.Top): unknown {
@@ -26,10 +27,10 @@ export function sanitizeCommitSubject(raw: string): string {
     return "Update project files";
   }
 
-  if (subject.length <= 72) {
+  if (subject.length <= MAX_COMMIT_SUBJECT_LENGTH) {
     return subject;
   }
-  return subject.slice(0, 72).trimEnd();
+  return subject.slice(0, MAX_COMMIT_SUBJECT_LENGTH).trimEnd();
 }
 
 /** Normalise a raw PR title to a single line with a sensible fallback. */

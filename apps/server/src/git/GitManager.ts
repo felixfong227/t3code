@@ -48,6 +48,7 @@ import {
 import { GitManagerError } from "@t3tools/contracts";
 import { TextGeneration } from "../textGeneration/TextGeneration.ts";
 import type { TextGenerationPolicy } from "../textGeneration/TextGenerationPolicy.ts";
+import { sanitizeCommitSubject } from "../textGeneration/TextGenerationUtils.ts";
 import { ProjectSetupScriptRunner } from "../project/Services/ProjectSetupScriptRunner.ts";
 import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -420,9 +421,7 @@ function sanitizeCommitMessage(generated: {
   body: string;
   branch?: string | undefined;
 } {
-  const rawSubject = generated.subject.trim().split(/\r?\n/g)[0]?.trim() ?? "";
-  const subject = rawSubject.trim();
-  const safeSubject = subject.length > 0 ? subject.slice(0, 72).trimEnd() : "Update project files";
+  const safeSubject = sanitizeCommitSubject(generated.subject);
   return {
     subject: safeSubject,
     body: generated.body.trim(),
