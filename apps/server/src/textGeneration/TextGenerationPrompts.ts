@@ -47,6 +47,7 @@ export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
       : "Return a JSON object with keys: subject, body.",
     "Rules:",
     "- prefer the repository's established commit style when examples are available",
+    "- follow any Commit message instructions below; they override recent examples when they conflict",
     "- if no repository style is available, use a concise imperative subject",
     "- body can be empty string or short bullet points",
     ...(wantsBranch
@@ -54,7 +55,7 @@ export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
       : []),
     "- capture the primary user-visible or developer-visible change",
     ...namedPolicyInstruction("Recent commit examples", input.policy?.commitHistory),
-    ...policyInstruction(input.policy?.commitInstructions),
+    ...namedPolicyInstruction("Commit message instructions", input.policy?.commitInstructions),
     "",
     `Branch: ${input.branch ?? "(detached)"}`,
     "",

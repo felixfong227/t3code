@@ -66,10 +66,13 @@ describe("buildCommitMessagePrompt", () => {
 
     expect(result.prompt).toContain("Recent commit examples:");
     expect(result.prompt).toContain("feat(ui): add compact toolbar");
-    expect(result.prompt).toContain("Additional instructions:");
+    expect(result.prompt).toContain(
+      "Commit message instructions below; they override recent examples when they conflict",
+    );
+    expect(result.prompt).toContain("Commit message instructions:");
     expect(result.prompt).toContain("Use CP ticket prefixes when present.");
     expect(result.prompt.indexOf("Recent commit examples:")).toBeLessThan(
-      result.prompt.indexOf("Additional instructions:"),
+      result.prompt.indexOf("Commit message instructions:"),
     );
   });
 });
