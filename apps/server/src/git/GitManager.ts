@@ -1866,7 +1866,9 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         const pullRequestTargetRemote =
           input.pullRequestTargetRemote ??
           (settingsPrTarget === "ask" ? undefined : settingsPrTarget);
-        const needsCommitTextGeneration = wantsCommit || input.featureBranch;
+        const hasCustomCommitMessage = parseCustomCommitMessage(input.commitMessage ?? "") !== null;
+        const needsCommitTextGeneration =
+          (wantsCommit || input.featureBranch) && !hasCustomCommitMessage;
         const textGenerationPolicy = needsCommitTextGeneration
           ? buildGitAutomationPolicy({
               settings: serverSettings.gitAutomation,

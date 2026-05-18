@@ -279,7 +279,6 @@ function isNoCommitHistoryError(stderr: string): boolean {
   const normalized = stderr.toLowerCase();
   return (
     normalized.includes("does not have any commits yet") ||
-    normalized.includes("your current branch") ||
     normalized.includes("unknown revision") ||
     normalized.includes("bad revision") ||
     normalized.includes("ambiguous argument")

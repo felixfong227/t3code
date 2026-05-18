@@ -1463,6 +1463,69 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("does not read recent commit history when a custom commit message is provided", () =>
+    Effect.gen(function* () {
+      let readRecentCommitStyleCalls = 0;
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        vcsDriver: {
+          statusDetails: () =>
+            Effect.succeed({
+              isRepo: true,
+              hasOriginRemote: false,
+              isDefaultBranch: false,
+              branch: "feature/custom-message",
+              upstreamRef: null,
+              hasWorkingTreeChanges: true,
+              workingTree: {
+                files: [],
+                insertions: 0,
+                deletions: 0,
+              },
+              hasUpstream: false,
+              aheadCount: 0,
+              behindCount: 0,
+              aheadOfDefaultCount: 0,
+            }),
+          prepareCommitContext: () =>
+            Effect.succeed({
+              stagedSummary: "M README.md",
+              stagedPatch: "diff --git a/README.md b/README.md",
+            }),
+          commit: () => Effect.succeed({ commitSha: "1234567890abcdef" }),
+          readRecentCommitStyle: () =>
+            Effect.sync(() => {
+              readRecentCommitStyleCalls += 1;
+              throw new GitCommandError({
+                operation: "log",
+                command: "git log",
+                cwd: "/repo",
+                detail: "should not be called",
+              });
+            }),
+        } as unknown as GitVcsDriver.GitVcsDriverShape,
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: "/repo",
+        action: "commit",
+        commitMessage: "feat: custom summary line",
+      });
+
+      expect(result.commit.status).toBe("created");
+      expect(result.commit.subject).toBe("feat: custom summary line");
+      expect(readRecentCommitStyleCalls).toBe(0);
+    }),
+  );
+
   it.effect("passes recent commit history and custom commit instructions into generation", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
