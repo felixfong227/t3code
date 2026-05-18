@@ -8,6 +8,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Random from "effect/Random";
+import gitUrlParse from "git-url-parse";
 import { detectSourceControlProviderFromRemoteUrl } from "./sourceControl.ts";
 
 export const WORKTREE_BRANCH_PREFIX = "t3code";
@@ -105,24 +106,9 @@ export function normalizeGitRemoteUrl(value: string): string {
     .replace(/\.git$/i, "")
     .toLowerCase();
 
-  if (/^(?:ssh|https?|git):\/\//i.test(normalized)) {
-    try {
-      const url = new URL(normalized);
-      const repositoryPath = url.pathname
-        .split("/")
-        .filter((segment) => segment.length > 0)
-        .join("/");
-      if (url.hostname && repositoryPath.includes("/")) {
-        return `${url.hostname}/${repositoryPath}`;
-      }
-    } catch {
-      return normalized;
-    }
-  }
-
-  const scpStyleRemote = parseScpStyleGitRemote(normalized);
-  if (scpStyleRemote) {
-    return `${scpStyleRemote.host}/${scpStyleRemote.repositoryPath}`;
+  const parsed = parseGitRemote(normalized);
+  if (parsed) {
+    return `${parsed.host}/${parsed.repositoryPath}`;
   }
 
   return normalized;
@@ -153,37 +139,18 @@ function normalizeRepositoryPath(path: string): string | null {
   return repositoryPath.includes("/") ? repositoryPath : null;
 }
 
-function parseScpStyleGitRemote(value: string): { host: string; repositoryPath: string } | null {
-  if (value.includes("://")) {
+function parseGitRemote(value: string): { host: string; repositoryPath: string } | null {
+  try {
+    const parsed = gitUrlParse(value);
+    const host = (parsed.resource || parsed.source || parsed.host).trim();
+    const repositoryPath = normalizeRepositoryPath(parsed.full_name);
+    if (!host || !repositoryPath) {
+      return null;
+    }
+    return { host, repositoryPath };
+  } catch {
     return null;
   }
-
-  const userSeparatorIndex = value.indexOf("@");
-  if (userSeparatorIndex <= 0) {
-    return null;
-  }
-
-  const hostStartIndex = userSeparatorIndex + 1;
-  const colonSeparatorIndex = value.indexOf(":", hostStartIndex);
-  const slashSeparatorIndex = value.indexOf("/", hostStartIndex);
-  const separatorIndex =
-    colonSeparatorIndex === -1
-      ? slashSeparatorIndex
-      : slashSeparatorIndex === -1
-        ? colonSeparatorIndex
-        : Math.min(colonSeparatorIndex, slashSeparatorIndex);
-
-  if (separatorIndex <= hostStartIndex) {
-    return null;
-  }
-
-  const host = value.slice(hostStartIndex, separatorIndex).trim();
-  const repositoryPath = normalizeRepositoryPath(value.slice(separatorIndex + 1));
-  if (!host || !repositoryPath || /\s/.test(host)) {
-    return null;
-  }
-
-  return { host, repositoryPath };
 }
 
 /**
@@ -196,15 +163,7 @@ export function parseRepositoryPathFromRemoteUrl(url: string | null): string | n
     return null;
   }
 
-  if (/^(?:ssh|https?|git):\/\//i.test(trimmed)) {
-    try {
-      return normalizeRepositoryPath(new URL(trimmed).pathname);
-    } catch {
-      return null;
-    }
-  }
-
-  return parseScpStyleGitRemote(trimmed)?.repositoryPath ?? null;
+  return parseGitRemote(trimmed)?.repositoryPath ?? null;
 }
 
 function deriveLocalBranchNameCandidatesFromRemoteRef(

@@ -98,7 +98,8 @@
   },
   "dependencies": {
     "@t3tools/contracts": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "git-url-parse": "^16.1.0"
   },
   "devDependencies": {
     "@effect/language-service": "catalog:",
