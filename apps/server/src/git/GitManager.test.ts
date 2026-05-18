@@ -46,6 +46,7 @@ interface FakeGhScenario {
   prListSequence?: string[];
   prListByHeadSelector?: Record<string, string>;
   prListSequenceByHeadSelector?: Record<string, string[]>;
+  prListSequenceByRepositoryAndHeadSelector?: Record<string, string[]>;
   createdPrUrl?: string;
   defaultBranch?: string;
   pullRequest?: {
@@ -395,6 +396,11 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       [...values],
     ]),
   );
+  const prListQueueByRepositoryAndHeadSelector = new Map(
+    Object.entries(scenario.prListSequenceByRepositoryAndHeadSelector ?? {}).map(
+      ([selector, values]) => [selector, [...values]],
+    ),
+  );
   const ghCalls: string[] = [];
 
   const execute: GitHubCliShape["execute"] = (input) => {
@@ -406,10 +412,19 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
     }
 
     if (args[0] === "pr" && args[1] === "list") {
+      const repositoryIndex = args.findIndex((value) => value === "--repo");
+      const repository =
+        repositoryIndex >= 0 && repositoryIndex < args.length - 1
+          ? args[repositoryIndex + 1]
+          : undefined;
       const headSelectorIndex = args.findIndex((value) => value === "--head");
       const headSelector =
         headSelectorIndex >= 0 && headSelectorIndex < args.length - 1
           ? args[headSelectorIndex + 1]
+          : undefined;
+      const mappedRepositoryQueue =
+        typeof repository === "string" && typeof headSelector === "string"
+          ? prListQueueByRepositoryAndHeadSelector.get(`${repository}\0${headSelector}`)?.shift()
           : undefined;
       const mappedQueue =
         typeof headSelector === "string"
@@ -419,7 +434,9 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         typeof headSelector === "string"
           ? scenario.prListByHeadSelector?.[headSelector]
           : undefined;
-      const stdout = (mappedQueue ?? mappedStdout ?? prListQueue.shift() ?? "[]") + "\n";
+      const stdout =
+        (mappedRepositoryQueue ?? mappedQueue ?? mappedStdout ?? prListQueue.shift() ?? "[]") +
+        "\n";
       return Effect.succeed(fakeGhOutput(stdout));
     }
 
@@ -2521,6 +2538,24 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                   },
                 },
               ]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([
+                {
+                  number: 2306,
+                  title: "Add origin-target PR",
+                  url: "https://github.com/felixfong227/t3code/pull/2306",
+                  baseRefName: "main",
+                  headRefName: "felix/integrate-pr-2305-1003",
+                  state: "OPEN",
+                  isCrossRepository: false,
+                  headRepository: {
+                    nameWithOwner: "felixfong227/t3code",
+                  },
+                  headRepositoryOwner: {
+                    login: "felixfong227",
+                  },
+                },
+              ]),
             ],
           },
         },
@@ -2534,8 +2569,13 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(result.pr.status).toBe("created");
       expect(result.pr.number).toBe(2306);
+      const status = yield* manager.status({ cwd: repoDir });
+      expect(status.pr?.number).toBe(2306);
       expect(ghCalls.join("\n")).toContain(
         "pr create --repo felixfong227/t3code --base main --head felix/integrate-pr-2305-1003",
+      );
+      expect(ghCalls.join("\n")).toContain(
+        "pr list --repo felixfong227/t3code --head felix/integrate-pr-2305-1003",
       );
     }),
   );

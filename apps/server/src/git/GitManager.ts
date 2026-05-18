@@ -721,6 +721,33 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const canonicalizeExistingPath = (value: string) =>
     fileSystem.realPath(value).pipe(Effect.catch(() => Effect.succeed(value)));
   const normalizeStatusCacheKey = canonicalizeExistingPath;
+  const pullRequestTargetByBranchRef = yield* Ref.make(
+    new Map<string, GitPullRequestTargetRemote>(),
+  );
+  const pullRequestTargetBranchKey = (cwd: string, branch: string) =>
+    normalizeStatusCacheKey(cwd).pipe(Effect.map((cacheKey) => `${cacheKey}\0${branch}`));
+  const rememberPullRequestTargetForBranch = (
+    cwd: string,
+    branch: string,
+    targetRemote: GitPullRequestTargetRemote | undefined,
+  ) =>
+    targetRemote && targetRemote !== "default"
+      ? pullRequestTargetBranchKey(cwd, branch).pipe(
+          Effect.flatMap((key) =>
+            Ref.update(pullRequestTargetByBranchRef, (targets) => {
+              const next = new Map(targets);
+              next.set(key, targetRemote);
+              return next;
+            }),
+          ),
+        )
+      : Effect.void;
+  const readRememberedPullRequestTargetForBranch = (cwd: string, branch: string) =>
+    pullRequestTargetBranchKey(cwd, branch).pipe(
+      Effect.flatMap((key) =>
+        Ref.get(pullRequestTargetByBranchRef).pipe(Effect.map((targets) => targets.get(key))),
+      ),
+    );
   const nonRepositoryStatusDetails = {
     isRepo: false,
     hasOriginRemote: false,
@@ -964,6 +991,43 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     } satisfies BranchHeadContext;
   });
 
+  const resolveBranchHeadContextsForPrLookup = Effect.fn("resolveBranchHeadContextsForPrLookup")(
+    function* (cwd: string, details: { branch: string; upstreamRef: string | null }) {
+      const rememberedTarget = yield* readRememberedPullRequestTargetForBranch(cwd, details.branch);
+      const targetRemotes = yield* listPullRequestTargetRemotes(cwd);
+      const preferences: Array<GitPullRequestTargetRemote | undefined> = [
+        rememberedTarget,
+        undefined,
+        ...targetRemotes.filter((remote) => remote !== "default" && remote !== rememberedTarget),
+      ];
+      const contexts: BranchHeadContext[] = [];
+      const seenTargetKeys = new Set<string>();
+
+      for (const preference of preferences) {
+        const context = yield* resolveBranchHeadContext(cwd, details, preference).pipe(
+          Effect.catch(() => Effect.succeed(null)),
+        );
+        if (!context) {
+          continue;
+        }
+
+        const targetKey =
+          context.targetContext?.remoteUrl ??
+          context.targetRemoteName ??
+          context.headRepositoryNameWithOwner ??
+          "default";
+        if (seenTargetKeys.has(targetKey)) {
+          continue;
+        }
+
+        contexts.push(context);
+        seenTargetKeys.add(targetKey);
+      }
+
+      return contexts;
+    },
+  );
+
   const findOpenPr = Effect.fn("findOpenPr")(function* (
     cwd: string,
     headContext: Pick<
@@ -1009,27 +1073,29 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     cwd: string,
     details: { branch: string; upstreamRef: string | null },
   ) {
-    const headContext = yield* resolveBranchHeadContext(cwd, details);
-    const parsedByNumber = new Map<number, PullRequestInfo>();
+    const headContexts = yield* resolveBranchHeadContextsForPrLookup(cwd, details);
+    const parsedByUrl = new Map<string, PullRequestInfo>();
 
-    for (const headSelector of headContext.headSelectors) {
-      const pullRequests = yield* (yield* sourceControlProvider(cwd)).listChangeRequests({
-        cwd,
-        headSelector,
-        state: "all",
-        limit: 20,
-        ...(headContext.targetContext ? { context: headContext.targetContext } : {}),
-      });
+    for (const headContext of headContexts) {
+      for (const headSelector of headContext.headSelectors) {
+        const pullRequests = yield* (yield* sourceControlProvider(cwd)).listChangeRequests({
+          cwd,
+          headSelector,
+          state: "all",
+          limit: 20,
+          ...(headContext.targetContext ? { context: headContext.targetContext } : {}),
+        });
 
-      for (const pr of pullRequests.map(toPullRequestInfo)) {
-        if (!matchesBranchHeadContext(pr, headContext)) {
-          continue;
+        for (const pr of pullRequests.map(toPullRequestInfo)) {
+          if (!matchesBranchHeadContext(pr, headContext)) {
+            continue;
+          }
+          parsedByUrl.set(pr.url, pr);
         }
-        parsedByNumber.set(pr.number, pr);
       }
     }
 
-    const parsed = Arr.sort(parsedByNumber.values(), pullRequestUpdatedAtDescOrder);
+    const parsed = Arr.sort(parsedByUrl.values(), pullRequestUpdatedAtDescOrder);
 
     const latestOpenPr = parsed.find((pr) => pr.state === "open");
     if (latestOpenPr) {
@@ -1358,6 +1424,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       },
       targetRemotePreference,
     );
+    yield* rememberPullRequestTargetForBranch(cwd, branch, targetRemotePreference);
 
     const existing = yield* findOpenPr(cwd, headContext);
     if (existing) {
