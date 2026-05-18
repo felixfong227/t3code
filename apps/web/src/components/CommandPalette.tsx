@@ -1,6 +1,6 @@
 "use client";
 
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
+import { scopedProjectKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
 import {
   DEFAULT_MODEL,
   type EnvironmentId,
@@ -49,6 +49,7 @@ import {
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useSettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
+import { getGitStatusSnapshot, useGitStatusRevision, watchGitStatus } from "../lib/gitStatusState";
 import {
   getSourceControlDiscoverySnapshot,
   refreshSourceControlDiscovery,
@@ -102,7 +103,12 @@ import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteResults } from "./CommandPaletteResults";
 import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
 import { ProjectFavicon } from "./ProjectFavicon";
-import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
+import {
+  prStatusIndicator,
+  resolveThreadPr,
+  ThreadRowLeadingStatus,
+  ThreadRowTrailingStatus,
+} from "./ThreadStatusIndicators";
 import { useServerKeybindings } from "../rpc/serverState";
 import { resolveShortcutCommand } from "../keybindings";
 import {
@@ -517,10 +523,48 @@ function OpenCommandPaletteDialog() {
     () => new Map<ProjectId, string>(projects.map((project) => [project.id, project.cwd])),
     [projects],
   );
+  const projectCwdByRef = useMemo(
+    () =>
+      new Map(
+        projects.map((project) => [
+          scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
+          project.cwd,
+        ]),
+      ),
+    [projects],
+  );
   const projectTitleById = useMemo(
     () => new Map<ProjectId, string>(projects.map((project) => [project.id, project.name])),
     [projects],
   );
+  const gitStatusRevision = useGitStatusRevision();
+
+  useEffect(() => {
+    const releases = new Map<string, () => void>();
+
+    for (const thread of threads) {
+      if (thread.branch === null) {
+        continue;
+      }
+      const projectCwd = projectCwdByRef.get(
+        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+      );
+      const cwd = thread.worktreePath ?? projectCwd ?? null;
+      if (cwd === null) {
+        continue;
+      }
+      const key = `${thread.environmentId}:${cwd}`;
+      if (!releases.has(key)) {
+        releases.set(key, watchGitStatus({ environmentId: thread.environmentId, cwd }));
+      }
+    }
+
+    return () => {
+      for (const release of releases.values()) {
+        release();
+      }
+    };
+  }, [projectCwdByRef, threads]);
 
   const activeThreadId = activeThread?.id;
   const currentProjectEnvironmentId =
@@ -697,25 +741,46 @@ function OpenCommandPaletteDialog() {
     ],
   );
 
-  const allThreadItems = useMemo(
-    () =>
-      buildThreadActionItems({
-        threads,
-        ...(activeThreadId ? { activeThreadId } : {}),
-        projectTitleById,
-        sortOrder: settings.sidebarThreadSortOrder,
-        icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
-        renderLeadingContent: (thread) => <ThreadRowLeadingStatus thread={thread} />,
-        renderTrailingContent: (thread) => <ThreadRowTrailingStatus thread={thread} />,
-        runThread: async (thread) => {
-          await navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
-          });
-        },
-      }),
-    [activeThreadId, navigate, projectTitleById, settings.sidebarThreadSortOrder, threads],
-  );
+  const allThreadItems = useMemo(() => {
+    // Rebuild pure search items when git status snapshots change so PR/MR
+    // numbers become searchable as soon as the status subscription resolves.
+    void gitStatusRevision;
+    return buildThreadActionItems({
+      threads,
+      ...(activeThreadId ? { activeThreadId } : {}),
+      projectTitleById,
+      sortOrder: settings.sidebarThreadSortOrder,
+      icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+      renderLeadingContent: (thread) => <ThreadRowLeadingStatus thread={thread} />,
+      renderTrailingContent: (thread) => <ThreadRowTrailingStatus thread={thread} />,
+      getThreadChangeRequestStatus: (thread) => {
+        const projectCwd = projectCwdByRef.get(
+          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+        );
+        const cwd = thread.worktreePath ?? projectCwd ?? null;
+        const gitStatus = getGitStatusSnapshot({
+          environmentId: thread.environmentId,
+          cwd: thread.branch != null ? cwd : null,
+        }).data;
+        const pr = resolveThreadPr(thread.branch, gitStatus);
+        return prStatusIndicator(pr, gitStatus?.sourceControlProvider);
+      },
+      runThread: async (thread) => {
+        await navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+        });
+      },
+    });
+  }, [
+    activeThreadId,
+    gitStatusRevision,
+    navigate,
+    projectCwdByRef,
+    projectTitleById,
+    settings.sidebarThreadSortOrder,
+    threads,
+  ]);
   const recentThreadItems = allThreadItems.slice(0, RECENT_THREAD_LIMIT);
 
   function pushPaletteView(view: CommandPaletteView): void {

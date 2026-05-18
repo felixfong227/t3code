@@ -12,6 +12,7 @@ import { type DraftId } from "~/composerDraftStore";
 import { DiffIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ChangeRequestStatusIcon, type PrStatusIndicator } from "../ThreadStatusIndicators";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
@@ -23,6 +24,7 @@ interface ChatHeaderProps {
   activeThreadId: ThreadId;
   draftId?: DraftId;
   activeThreadTitle: string;
+  activeThreadChangeRequestStatus?: PrStatusIndicator | null;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
   openInCwd: string | null;
@@ -61,6 +63,7 @@ export const ChatHeader = memo(function ChatHeader({
   activeThreadId,
   draftId,
   activeThreadTitle,
+  activeThreadChangeRequestStatus,
   activeProjectName,
   isGitRepo,
   openInCwd,
@@ -92,6 +95,22 @@ export const ChatHeader = memo(function ChatHeader({
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
         <SidebarTrigger className="size-7 shrink-0 md:hidden" />
+        {activeThreadChangeRequestStatus ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  aria-label={activeThreadChangeRequestStatus.tooltip}
+                  className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border/70 px-1.5 text-xs font-medium ${activeThreadChangeRequestStatus.colorClass}`}
+                />
+              }
+            >
+              <ChangeRequestStatusIcon className="size-3" />
+              <span>{activeThreadChangeRequestStatus.numberLabel}</span>
+            </TooltipTrigger>
+            <TooltipPopup side="bottom">{activeThreadChangeRequestStatus.tooltip}</TooltipPopup>
+          </Tooltip>
+        ) : null}
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
           title={activeThreadTitle}

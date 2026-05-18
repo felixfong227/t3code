@@ -125,6 +125,9 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
   renderLeadingContent?: (thread: TThread) => ReactNode;
   /** Optional content rendered inline after the title text per-thread. */
   renderTrailingContent?: (thread: TThread) => ReactNode;
+  getThreadChangeRequestStatus?: (
+    thread: TThread,
+  ) => { readonly numberLabel: string; readonly searchTerms: ReadonlyArray<string> } | null;
   runThread: (thread: Pick<SidebarThreadSummary, "environmentId" | "id">) => Promise<void>;
   limit?: number;
 }): CommandPaletteActionItem[] {
@@ -151,14 +154,22 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
 
     const leadingContent = input.renderLeadingContent?.(thread);
     const trailingContent = input.renderTrailingContent?.(thread);
+    const changeRequestStatus = input.getThreadChangeRequestStatus?.(thread) ?? null;
 
     return Object.assign(
       {
         kind: "action" as const,
         value: `thread:${thread.id}`,
-        searchTerms: [thread.title, projectTitle ?? ``, thread.branch ?? ``],
+        searchTerms: [
+          thread.title,
+          ...(changeRequestStatus?.searchTerms ?? []),
+          projectTitle ?? ``,
+          thread.branch ?? ``,
+        ],
         title: thread.title,
-        description: descriptionParts.join(` · `),
+        description: [changeRequestStatus?.numberLabel, ...descriptionParts]
+          .filter((part): part is string => Boolean(part))
+          .join(` · `),
         timestamp: formatRelativeTimeLabel(
           thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
         ),

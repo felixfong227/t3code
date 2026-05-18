@@ -39,6 +39,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { useGitStatus } from "~/lib/gitStatusState";
+import { prStatusIndicator, resolveThreadPr } from "./ThreadStatusIndicators";
 import { usePrimaryEnvironmentId } from "../environments/primary";
 import { readEnvironmentApi } from "../environmentApi";
 import { isElectron } from "../env";
@@ -1631,6 +1632,10 @@ export default function ChatView(props: ChatViewProps) {
       })
     : null;
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
+  const activeThreadChangeRequestStatus = useMemo(() => {
+    const pr = resolveThreadPr(activeThread?.branch ?? null, gitStatusQuery.data);
+    return prStatusIndicator(pr, gitStatusQuery.data?.sourceControlProvider);
+  }, [activeThread?.branch, gitStatusQuery.data]);
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
   // Prefer an instance-id match so a custom Codex instance (e.g.
@@ -3537,6 +3542,7 @@ export default function ChatView(props: ChatViewProps) {
           activeThreadId={activeThread.id}
           {...(routeKind === "draft" && draftId ? { draftId } : {})}
           activeThreadTitle={activeThread.title}
+          activeThreadChangeRequestStatus={activeThreadChangeRequestStatus}
           activeProjectName={activeProject?.name}
           isGitRepo={isGitRepo}
           openInCwd={gitCwd}

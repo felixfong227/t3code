@@ -110,6 +110,38 @@ describe("buildThreadActionItems", () => {
     ]);
   });
 
+  it("includes change request numbers in thread descriptions and search terms", () => {
+    const threadItems = buildThreadActionItems({
+      threads: [
+        makeThread({
+          id: ThreadId.make("thread-pr"),
+          title: "Add auto review mode",
+          branch: "feature/codex-auto-review",
+        }),
+      ],
+      projectTitleById: new Map([[PROJECT_ID, "Project"]]),
+      sortOrder: "updated_at",
+      icon: null,
+      getThreadChangeRequestStatus: () => ({
+        numberLabel: "#5",
+        searchTerms: ["5", "#5", "PR 5", "PR #5"],
+      }),
+      runThread: async (_thread) => undefined,
+    });
+
+    expect(threadItems[0]?.description).toBe("#5 · Project · #feature/codex-auto-review");
+
+    const groups = filterCommandPaletteGroups({
+      activeGroups: [],
+      query: "PR 5",
+      isInSubmenu: false,
+      projectSearchItems: [],
+      threadSearchItems: threadItems,
+    });
+
+    expect(groups[0]?.items.map((item) => item.value)).toEqual(["thread:thread-pr"]);
+  });
+
   it("preserves thread project-name matches when there is no stronger title match", () => {
     const group: CommandPaletteGroup = {
       value: "threads-search",

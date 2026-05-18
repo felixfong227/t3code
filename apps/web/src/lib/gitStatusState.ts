@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { Atom } from "effect/unstable/reactivity";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import {
@@ -58,6 +58,8 @@ const watchedGitStatuses = new Map<string, WatchedGitStatus>();
 const knownGitStatusKeys = new Set<string>();
 const gitStatusRefreshInFlight = new Map<string, Promise<VcsStatusResult>>();
 const gitStatusLastRefreshAtByKey = new Map<string, number>();
+const gitStatusRevisionListeners = new Set<() => void>();
+let gitStatusRevision = 0;
 
 const GIT_STATUS_REFRESH_DEBOUNCE_MS = 1_000;
 
@@ -160,6 +162,8 @@ export function resetGitStatusStateForTests(): void {
     appAtomRegistry.set(gitStatusStateAtom(key), INITIAL_GIT_STATUS_STATE);
   }
   knownGitStatusKeys.clear();
+  gitStatusRevision = 0;
+  emitGitStatusRevision();
 }
 
 export function useGitStatus(target: GitStatusTarget): GitStatusState {
@@ -173,6 +177,36 @@ export function useGitStatus(target: GitStatusTarget): GitStatusState {
     targetKey !== null ? gitStatusStateAtom(targetKey) : EMPTY_GIT_STATUS_ATOM,
   );
   return targetKey === null ? EMPTY_GIT_STATUS_STATE : state;
+}
+
+export function useGitStatusRevision(): number {
+  return useSyncExternalStore(
+    subscribeGitStatusRevision,
+    getGitStatusRevisionSnapshot,
+    getGitStatusRevisionSnapshot,
+  );
+}
+
+function getGitStatusRevisionSnapshot(): number {
+  return gitStatusRevision;
+}
+
+function subscribeGitStatusRevision(listener: () => void): () => void {
+  gitStatusRevisionListeners.add(listener);
+  return () => {
+    gitStatusRevisionListeners.delete(listener);
+  };
+}
+
+function emitGitStatusRevision(): void {
+  for (const listener of gitStatusRevisionListeners) {
+    listener();
+  }
+}
+
+function bumpGitStatusRevision(): void {
+  gitStatusRevision += 1;
+  emitGitStatusRevision();
 }
 
 function unwatchGitStatus(targetKey: string): void {
@@ -252,6 +286,7 @@ function subscribeToGitStatus(targetKey: string, cwd: string, client: GitStatusC
         cause: null,
         isPending: false,
       });
+      bumpGitStatusRevision();
     },
     {
       onResubscribe: () => {
@@ -284,4 +319,5 @@ function markGitStatusPending(targetKey: string): void {
   }
 
   appAtomRegistry.set(atom, next);
+  bumpGitStatusRevision();
 }
