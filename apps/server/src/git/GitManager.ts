@@ -1867,23 +1867,25 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         const pullRequestTargetRemote =
           input.pullRequestTargetRemote ??
           (settingsPrTarget === "ask" ? undefined : settingsPrTarget);
-        const commitHistory = serverSettings.gitAutomation.followCommitHistory
-          ? yield* gitCore
-              .readRecentCommitStyle(input.cwd)
-              .pipe(
-                Effect.mapError((cause) =>
-                  gitManagerError(
-                    "runStackedAction",
-                    "Failed to read recent commit history.",
-                    cause,
-                  ),
-                ),
-              )
-          : "";
-        const textGenerationPolicy = buildGitAutomationPolicy({
-          settings: serverSettings.gitAutomation,
-          commitHistory,
-        });
+        const needsCommitTextGeneration = wantsCommit || input.featureBranch;
+        const textGenerationPolicy = needsCommitTextGeneration
+          ? buildGitAutomationPolicy({
+              settings: serverSettings.gitAutomation,
+              commitHistory: serverSettings.gitAutomation.followCommitHistory
+                ? yield* gitCore
+                    .readRecentCommitStyle(input.cwd)
+                    .pipe(
+                      Effect.mapError((cause) =>
+                        gitManagerError(
+                          "runStackedAction",
+                          "Failed to read recent commit history.",
+                          cause,
+                        ),
+                      ),
+                    )
+                : "",
+            })
+          : undefined;
 
         if (input.featureBranch) {
           yield* Ref.set(currentPhase, Option.some("branch"));

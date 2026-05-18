@@ -184,8 +184,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
     withFakeCodexEnv(
       {
         output: JSON.stringify({
-          subject:
-            "  Add important change to the system with too much detail and a trailing period.\nsecondary line",
+          subject: "  Add important change.\nsecondary line",
           body: "\n- added migration\n- updated tests\n",
         }),
         stdinMustNotContain: "branch must be a short semantic git branch fragment",
@@ -201,7 +200,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
           });
 
           expect(generated.subject.length).toBeLessThanOrEqual(72);
-          expect(generated.subject.endsWith(".")).toBe(false);
+          expect(generated.subject).toBe("Add important change.");
           expect(generated.body).toBe("- added migration\n- updated tests");
           expect(generated.branch).toBeUndefined();
         }),

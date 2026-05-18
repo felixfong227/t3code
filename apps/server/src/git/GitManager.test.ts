@@ -685,6 +685,7 @@ function makeManager(input?: {
   textGeneration?: Partial<FakeGitTextGeneration>;
   settings?: Partial<ServerSettings>;
   setupScriptRunner?: ProjectSetupScriptRunnerShape;
+  vcsDriver?: GitVcsDriver.GitVcsDriverShape;
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
@@ -694,11 +695,13 @@ function makeManager(input?: {
 
   const serverSettingsLayer = ServerSettingsService.layerTest(input?.settings ?? {});
 
-  const vcsDriverLayer = GitVcsDriver.layer.pipe(
-    Layer.provideMerge(VcsProcess.layer),
-    Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(ServerConfigLayer),
-  );
+  const vcsDriverLayer = input?.vcsDriver
+    ? Layer.succeed(GitVcsDriver.GitVcsDriver, input.vcsDriver)
+    : GitVcsDriver.layer.pipe(
+        Layer.provideMerge(VcsProcess.layer),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(ServerConfigLayer),
+      );
   const sourceControlRegistryLayer = Layer.effect(
     SourceControlProviderRegistry.SourceControlProviderRegistry,
     GitHubSourceControlProvider.make().pipe(
@@ -1883,6 +1886,67 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           Effect.map((output) => output.stdout.trim()),
         ),
       ).toBe("origin/feature/push-only");
+    }),
+  );
+
+  it.effect("does not read recent commit history for push-only actions", () =>
+    Effect.gen(function* () {
+      let readRecentCommitStyleCalls = 0;
+      const statusDetails: GitVcsDriver.GitStatusDetails = {
+        isRepo: true,
+        hasOriginRemote: true,
+        isDefaultBranch: false,
+        branch: "feature/push-only",
+        upstreamRef: null,
+        hasWorkingTreeChanges: false,
+        workingTree: {
+          files: [],
+          insertions: 0,
+          deletions: 0,
+        },
+        hasUpstream: false,
+        aheadCount: 1,
+        behindCount: 0,
+        aheadOfDefaultCount: 1,
+      };
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        vcsDriver: {
+          statusDetails: () => Effect.succeed(statusDetails),
+          pushCurrentBranch: () =>
+            Effect.succeed({
+              status: "pushed" as const,
+              branch: "feature/push-only",
+              setUpstream: true,
+            }),
+          readRecentCommitStyle: () =>
+            Effect.sync(() => {
+              readRecentCommitStyleCalls += 1;
+              throw new GitCommandError({
+                operation: "log",
+                command: "git log",
+                cwd: "/repo",
+                detail: "should not be called",
+              });
+            }),
+        } as unknown as GitVcsDriver.GitVcsDriverShape,
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: "/repo",
+        action: "push",
+      });
+
+      expect(result.push.status).toBe("pushed");
+      expect(readRecentCommitStyleCalls).toBe(0);
     }),
   );
 

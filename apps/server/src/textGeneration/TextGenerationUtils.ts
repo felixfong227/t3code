@@ -19,18 +19,17 @@ export function limitSection(value: string, maxChars: number): string {
   return `${truncated}\n\n[truncated]`;
 }
 
-/** Normalise a raw commit subject to imperative-mood, ≤72 chars, no trailing period. */
+/** Normalise a raw commit subject to a single line with a sensible fallback. */
 export function sanitizeCommitSubject(raw: string): string {
-  const singleLine = raw.trim().split(/\r?\n/g)[0]?.trim() ?? "";
-  const withoutTrailingPeriod = singleLine.replace(/[.]+$/g, "").trim();
-  if (withoutTrailingPeriod.length === 0) {
+  const subject = raw.trim().split(/\r?\n/g)[0]?.trim() ?? "";
+  if (subject.length === 0) {
     return "Update project files";
   }
 
-  if (withoutTrailingPeriod.length <= 72) {
-    return withoutTrailingPeriod;
+  if (subject.length <= 72) {
+    return subject;
   }
-  return withoutTrailingPeriod.slice(0, 72).trimEnd();
+  return subject.slice(0, 72).trimEnd();
 }
 
 /** Normalise a raw PR title to a single line with a sensible fallback. */
