@@ -1876,12 +1876,10 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
                 ? yield* gitCore
                     .readRecentCommitStyle(input.cwd)
                     .pipe(
-                      Effect.mapError((cause) =>
-                        gitManagerError(
-                          "runStackedAction",
-                          "Failed to read recent commit history.",
-                          cause,
-                        ),
+                      Effect.catch((cause) =>
+                        Effect.logWarning(
+                          `GitManager.runStackedAction: failed to read recent commit history for ${input.cwd}; continuing without style examples: ${cause.message}`,
+                        ).pipe(Effect.as("")),
                       ),
                     )
                 : "",

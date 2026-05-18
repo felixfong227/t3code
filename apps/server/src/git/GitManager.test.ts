@@ -1571,6 +1571,75 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("continues commit generation when recent commit history cannot be read", () =>
+    Effect.gen(function* () {
+      let receivedPolicy: TextGenerationPolicy | undefined;
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "Use repository style when available.",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              receivedPolicy = input.policy;
+              return { subject: "Update files", body: "" };
+            }),
+        },
+        vcsDriver: {
+          statusDetails: () =>
+            Effect.succeed({
+              isRepo: true,
+              hasOriginRemote: false,
+              isDefaultBranch: false,
+              branch: "feature/history-failure",
+              upstreamRef: null,
+              hasWorkingTreeChanges: true,
+              workingTree: {
+                files: [],
+                insertions: 0,
+                deletions: 0,
+              },
+              hasUpstream: false,
+              aheadCount: 0,
+              behindCount: 0,
+              aheadOfDefaultCount: 0,
+            }),
+          prepareCommitContext: () =>
+            Effect.succeed({
+              stagedSummary: "M README.md",
+              stagedPatch: "diff --git a/README.md b/README.md",
+            }),
+          commit: () => Effect.succeed({ commitSha: "1234567890abcdef" }),
+          readRecentCommitStyle: () =>
+            Effect.fail(
+              new GitCommandError({
+                operation: "log",
+                command: "git log",
+                cwd: "/repo",
+                detail: "log failed",
+              }),
+            ),
+        } as unknown as GitVcsDriver.GitVcsDriverShape,
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: "/repo",
+        action: "commit",
+      });
+
+      expect(result.commit.status).toBe("created");
+      expect(result.commit.subject).toBe("Update files");
+      expect(receivedPolicy?.commitHistory).toBeUndefined();
+      expect(receivedPolicy?.commitInstructions).toBe("Use repository style when available.");
+    }),
+  );
+
   it.effect("omits recent commit history when disabled", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
