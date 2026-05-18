@@ -9,7 +9,7 @@ The purpose of this fork is to add and maintain the features I want on top of up
 Fork-specific implementations are not intended to compete with upstream forever. If upstream T3 Code adds the same feature, or a similar-enough implementation that solves the same problem, this fork should prefer the upstream version and remove the fork-specific implementation.
 
 - Draft diff context comments for turn diffs ([#1](https://github.com/felixfong227/t3code/pull/1)) (Tracking [#79](https://github.com/pingdotgg/t3code/issues/79) and [#1003](https://github.com/pingdotgg/t3code/pull/1003)).
-- Collapsible sidebar toggle with keyboard shortcut support ([#1](https://github.com/felixfong227/t3code/pull/1)) (Tracking: [#2282](https://github.com/pingdotgg/t3code/issues/2282) and [#2011](https://github.com/pingdotgg/t3code/pull/2011)).
+- Collapsible sidebar toggle with keyboard shortcut support ([#1](https://github.com/felixfong227/t3code/pull/1)) (Tracking [#2282](https://github.com/pingdotgg/t3code/issues/2282) and [#2011](https://github.com/pingdotgg/t3code/pull/2011)).
 - Mermaid diagram rendering in chat markdown ([#2](https://github.com/felixfong227/t3code/pull/2)) (Tracking [#2250](https://github.com/pingdotgg/t3code/issues/2250)).
 - Fork-aware PR/MR target selection ([#3](https://github.com/felixfong227/t3code/pull/3)).
 - Automation style settings and PR target handling ([#4](https://github.com/felixfong227/t3code/pull/4)) (Tracking [#2123](https://github.com/pingdotgg/t3code/pull/2123)).
@@ -43,7 +43,7 @@ In these examples:
 ## Development
 
 ```bash
-bun install .
+bun install
 
 T3_DEV_HOME="$(mktemp -d "$PWD/.t3-dev.XXXXXX")"
 
