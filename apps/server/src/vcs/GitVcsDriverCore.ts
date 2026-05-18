@@ -276,18 +276,14 @@ function parseTrackingBranchByUpstreamRef(stdout: string, upstreamRef: string): 
 }
 
 function isNoCommitHistoryError(stderr: string): boolean {
-  const normalized = stderr.toLowerCase();
-  return (
-    normalized.includes("does not have any commits yet") ||
-    normalized.includes("unknown revision") ||
-    normalized.includes("bad revision") ||
-    normalized.includes("ambiguous argument")
-  );
+  return stderr.toLowerCase().includes("does not have any commits yet");
 }
+
+const RECENT_COMMIT_ENTRY_SEPARATOR = "\x1e";
 
 function normalizeRecentCommitStyle(stdout: string): string {
   return stdout
-    .split("\x1e")
+    .split(RECENT_COMMIT_ENTRY_SEPARATOR)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
     .join("\n\n---\n\n");
