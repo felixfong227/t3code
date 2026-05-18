@@ -1428,16 +1428,80 @@ describe("SourceControlSettingsPanel discovery states", () => {
       .toBeChecked();
 
     await followHistory.click();
-    await page
-      .getByLabelText("Commit message instructions")
-      .fill("Use CP ticket prefixes when present.");
-
     expect(updateSettings).toHaveBeenCalledWith({
       gitAutomation: expect.objectContaining({ followCommitHistory: false }),
     });
+    updateSettings.mockClear();
+
+    const commitInstructions = page.getByPlaceholder("Example: Use CP-123 prefixes");
+    await commitInstructions.fill("Use CP ticket prefixes when present.");
+    await expect.element(commitInstructions).toHaveValue("Use CP ticket prefixes when present.");
+    expect(updateSettings).not.toHaveBeenCalled();
+    (document.activeElement as HTMLElement | null)?.blur();
+
     expect(updateSettings).toHaveBeenCalledWith({
       gitAutomation: expect.objectContaining({
         commitStyleInstructions: "Use CP ticket prefixes when present.",
+      }),
+    });
+  });
+
+  it("keeps trailing spaces while editing Git automation textareas", async () => {
+    const updateSettings = vi.fn(async (patch: ServerSettingsPatch) => {
+      const current = createBaseServerConfig();
+      return {
+        ...current.settings,
+        ...patch,
+        gitAutomation: {
+          ...current.settings.gitAutomation,
+          ...patch.gitAutomation,
+        },
+      };
+    });
+    window.nativeApi = {
+      server: {
+        discoverSourceControl: async () => ({
+          versionControlSystems: [
+            {
+              kind: "git",
+              label: "Git",
+              executable: "git",
+              implemented: true,
+              status: "available",
+              version: Option.some("git version 2.50.0"),
+              installHint: "Install Git.",
+              detail: Option.none(),
+            },
+          ],
+          sourceControlProviders: [],
+        }),
+        updateSettings,
+      },
+      persistence: {
+        getClientSettings: async () => null,
+        setClientSettings: async () => undefined,
+      },
+    } as unknown as LocalApi;
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <SourceControlSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Toggle Git details" }).click();
+    const titleInstructions = page.getByPlaceholder("Example: Start with the user-facing");
+
+    await titleInstructions.fill("Use conventional style ");
+
+    await expect.element(titleInstructions).toHaveValue("Use conventional style ");
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    expect(updateSettings).toHaveBeenCalledWith({
+      gitAutomation: expect.objectContaining({
+        pullRequestTitleInstructions: "Use conventional style ",
       }),
     });
   });

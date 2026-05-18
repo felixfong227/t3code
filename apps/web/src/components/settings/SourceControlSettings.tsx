@@ -499,7 +499,7 @@ function GitAutomationTextareaSetting({
   useEffect(() => {
     setDraftValue(value);
   }, [value]);
-  const canReset = draftValue !== defaultValue;
+  const canResetDraft = draftValue !== defaultValue;
   const commitDraftValue = () => {
     if (draftValue !== value) {
       onValueChange(draftValue);
@@ -517,11 +517,11 @@ function GitAutomationTextareaSetting({
         <span
           className={cn(
             "inline-flex size-5 shrink-0 items-center justify-center transition-opacity",
-            canReset ? "opacity-100" : "pointer-events-none opacity-0",
+            canResetDraft ? "opacity-100" : "pointer-events-none opacity-0",
           )}
-          aria-hidden={!canReset}
+          aria-hidden={!canResetDraft}
         >
-          {canReset ? <SettingResetButton label={label} onClick={resetValue} /> : null}
+          {canResetDraft ? <SettingResetButton label={label} onClick={resetValue} /> : null}
         </span>
       </div>
       <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">{description}</p>
