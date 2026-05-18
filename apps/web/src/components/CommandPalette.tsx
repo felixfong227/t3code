@@ -272,6 +272,45 @@ function sortAddProjectProviderSources(
   });
 }
 
+function buildWatchedGitStatusTargetsJson(input: {
+  readonly threads: ReadonlyArray<{
+    readonly branch: string | null;
+    readonly environmentId: EnvironmentId;
+    readonly projectId: ProjectId;
+    readonly worktreePath: string | null;
+  }>;
+  readonly projectCwdByRef: ReadonlyMap<string, string>;
+}): string {
+  const targetsByKey = new Map<string, readonly [EnvironmentId, string]>();
+
+  for (const thread of input.threads) {
+    if (thread.branch === null) {
+      continue;
+    }
+    const projectCwd = input.projectCwdByRef.get(
+      scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+    );
+    const cwd = thread.worktreePath ?? projectCwd ?? null;
+    if (cwd === null) {
+      continue;
+    }
+    const key = JSON.stringify([thread.environmentId, cwd]);
+    targetsByKey.set(key, [thread.environmentId, cwd]);
+  }
+
+  return JSON.stringify(
+    [...targetsByKey.entries()]
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([, target]) => target),
+  );
+}
+
+function parseWatchedGitStatusTargetsJson(
+  value: string,
+): ReadonlyArray<readonly [EnvironmentId, string]> {
+  return JSON.parse(value) as ReadonlyArray<readonly [EnvironmentId, string]>;
+}
+
 type AddProjectRemoteSourceReadiness = Record<
   AddProjectRemoteSource,
   { readonly ready: boolean; readonly hint: string | null }
@@ -538,33 +577,22 @@ function OpenCommandPaletteDialog() {
     [projects],
   );
   const gitStatusRevision = useGitStatusRevision();
+  const watchedGitStatusTargetsJson = useMemo(
+    () => buildWatchedGitStatusTargetsJson({ threads, projectCwdByRef }),
+    [projectCwdByRef, threads],
+  );
 
   useEffect(() => {
-    const releases = new Map<string, () => void>();
-
-    for (const thread of threads) {
-      if (thread.branch === null) {
-        continue;
-      }
-      const projectCwd = projectCwdByRef.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      );
-      const cwd = thread.worktreePath ?? projectCwd ?? null;
-      if (cwd === null) {
-        continue;
-      }
-      const key = `${thread.environmentId}:${cwd}`;
-      if (!releases.has(key)) {
-        releases.set(key, watchGitStatus({ environmentId: thread.environmentId, cwd }));
-      }
-    }
+    const releases = parseWatchedGitStatusTargetsJson(watchedGitStatusTargetsJson).map(
+      ([environmentId, cwd]) => watchGitStatus({ environmentId, cwd }),
+    );
 
     return () => {
-      for (const release of releases.values()) {
+      for (const release of releases) {
         release();
       }
     };
-  }, [projectCwdByRef, threads]);
+  }, [watchedGitStatusTargetsJson]);
 
   const activeThreadId = activeThread?.id;
   const currentProjectEnvironmentId =

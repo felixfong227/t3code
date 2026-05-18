@@ -17,6 +17,11 @@ const processResult = (stdout: string): VcsProcess.VcsProcessOutput => ({
   stderrTruncated: false,
 });
 
+const githubCliError = new GitHubCli.GitHubCliError({
+  operation: "execute",
+  detail: "failed",
+});
+
 function makeProvider(github: Partial<GitHubCli.GitHubCliShape>) {
   return GitHubSourceControlProvider.make().pipe(
     Effect.provide(Layer.mock(GitHubCli.GitHubCli)(github)),
@@ -113,6 +118,189 @@ it.effect("uses gh json listing for non-open change request state queries", () =
   }),
 );
 
+it.effect("uses the resolved remote context repository for non-open GitHub PR listing", () =>
+  Effect.gen(function* () {
+    const executeInputs: Parameters<GitHubCli.GitHubCliShape["execute"]>[0][] = [];
+    const provider = yield* makeProvider({
+      execute: (input) => {
+        executeInputs.push(input);
+        return Effect.succeed(
+          processResult(
+            JSON.stringify([
+              {
+                number: 6,
+                title: "Fork PR",
+                url: "https://github.com/felixfong227/t3code/pull/6",
+                baseRefName: "main",
+                headRefName: "feature/thread-change-request-numbers",
+                state: "OPEN",
+                updatedAt: "2026-05-18T00:00:00.000Z",
+              },
+            ]),
+          ),
+        );
+      },
+    });
+
+    const changeRequests = yield* provider.listChangeRequests({
+      cwd: "/repo",
+      context: {
+        provider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+        remoteName: "origin",
+        remoteUrl: "git@github.com:felixfong227/t3code.git",
+      },
+      headSelector: "feature/thread-change-request-numbers",
+      state: "all",
+      limit: 20,
+    });
+
+    assert.deepStrictEqual(executeInputs[0]?.args.slice(0, 5), [
+      "pr",
+      "list",
+      "--repo",
+      "felixfong227/t3code",
+      "--head",
+    ]);
+    assert.strictEqual(changeRequests[0]?.number, 6);
+  }),
+);
+
+it.effect("lists GitHub PRs from the resolved remote context repository first", () =>
+  Effect.gen(function* () {
+    const listInputs: Parameters<GitHubCli.GitHubCliShape["listOpenPullRequests"]>[0][] = [];
+    const provider = yield* makeProvider({
+      listOpenPullRequests: (input) => {
+        listInputs.push(input);
+        return Effect.succeed([
+          {
+            number: 6,
+            title: "Fork PR",
+            url: "https://github.com/felixfong227/t3code/pull/6",
+            baseRefName: "main",
+            headRefName: "feature/thread-change-request-numbers",
+            state: "open",
+          },
+        ]);
+      },
+    });
+
+    const changeRequests = yield* provider.listChangeRequests({
+      cwd: "/repo",
+      context: {
+        provider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+        remoteName: "origin",
+        remoteUrl: "git@github.com:felixfong227/t3code.git",
+      },
+      headSelector: "feature/thread-change-request-numbers",
+      state: "open",
+      limit: 1,
+    });
+
+    assert.deepStrictEqual(listInputs, [
+      {
+        cwd: "/repo",
+        repository: "felixfong227/t3code",
+        headSelector: "feature/thread-change-request-numbers",
+        limit: 1,
+      },
+    ]);
+    assert.strictEqual(changeRequests[0]?.number, 6);
+  }),
+);
+
+it.effect("falls back to the default GitHub repository when context listing is empty", () =>
+  Effect.gen(function* () {
+    const listInputs: Parameters<GitHubCli.GitHubCliShape["listOpenPullRequests"]>[0][] = [];
+    const provider = yield* makeProvider({
+      listOpenPullRequests: (input) => {
+        listInputs.push(input);
+        if (input.repository) {
+          return Effect.succeed([]);
+        }
+        return Effect.succeed([
+          {
+            number: 1003,
+            title: "Upstream PR",
+            url: "https://github.com/pingdotgg/t3code/pull/1003",
+            baseRefName: "main",
+            headRefName: "feature/upstream",
+            state: "open",
+          },
+        ]);
+      },
+    });
+
+    const changeRequests = yield* provider.listChangeRequests({
+      cwd: "/repo",
+      context: {
+        provider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+        remoteName: "origin",
+        remoteUrl: "git@github.com:felixfong227/t3code.git",
+      },
+      headSelector: "feature/upstream",
+      state: "open",
+      limit: 1,
+    });
+
+    assert.deepStrictEqual(listInputs, [
+      {
+        cwd: "/repo",
+        repository: "felixfong227/t3code",
+        headSelector: "feature/upstream",
+        limit: 1,
+      },
+      {
+        cwd: "/repo",
+        headSelector: "feature/upstream",
+        limit: 1,
+      },
+    ]);
+    assert.strictEqual(changeRequests[0]?.number, 1003);
+  }),
+);
+
+it.effect("falls back to the default GitHub repository once when context listing errors", () =>
+  Effect.gen(function* () {
+    const listInputs: Parameters<GitHubCli.GitHubCliShape["listOpenPullRequests"]>[0][] = [];
+    const provider = yield* makeProvider({
+      listOpenPullRequests: (input) => {
+        listInputs.push(input);
+        if (input.repository) {
+          return Effect.fail(githubCliError);
+        }
+        return Effect.succeed([]);
+      },
+    });
+
+    const changeRequests = yield* provider.listChangeRequests({
+      cwd: "/repo",
+      context: {
+        provider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+        remoteName: "origin",
+        remoteUrl: "git@github.com:felixfong227/t3code.git",
+      },
+      headSelector: "feature/missing",
+      state: "open",
+      limit: 1,
+    });
+
+    assert.deepStrictEqual(changeRequests, []);
+    assert.deepStrictEqual(listInputs, [
+      {
+        cwd: "/repo",
+        repository: "felixfong227/t3code",
+        headSelector: "feature/missing",
+        limit: 1,
+      },
+      {
+        cwd: "/repo",
+        headSelector: "feature/missing",
+        limit: 1,
+      },
+    ]);
+  }),
+);
+
 it.effect("treats empty non-open change request listing output as no results", () =>
   Effect.gen(function* () {
     const provider = yield* makeProvider({
@@ -127,6 +315,85 @@ it.effect("treats empty non-open change request listing output as no results", (
     });
 
     assert.deepStrictEqual(changeRequests, []);
+  }),
+);
+
+it.effect("falls back to default non-open GitHub PR listing once when context listing errors", () =>
+  Effect.gen(function* () {
+    const executeInputs: Parameters<GitHubCli.GitHubCliShape["execute"]>[0][] = [];
+    const provider = yield* makeProvider({
+      execute: (input) => {
+        executeInputs.push(input);
+        if (input.args.includes("--repo")) {
+          return Effect.fail(githubCliError);
+        }
+        return Effect.succeed(processResult(""));
+      },
+    });
+
+    const changeRequests = yield* provider.listChangeRequests({
+      cwd: "/repo",
+      context: {
+        provider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+        remoteName: "origin",
+        remoteUrl: "git@github.com:felixfong227/t3code.git",
+      },
+      headSelector: "feature/missing",
+      state: "all",
+      limit: 10,
+    });
+
+    assert.deepStrictEqual(changeRequests, []);
+    assert.strictEqual(executeInputs.length, 2);
+    assert.deepStrictEqual(executeInputs[0]?.args.slice(0, 5), [
+      "pr",
+      "list",
+      "--repo",
+      "felixfong227/t3code",
+      "--head",
+    ]);
+    assert.deepStrictEqual(executeInputs[1]?.args.slice(0, 4), [
+      "pr",
+      "list",
+      "--head",
+      "feature/missing",
+    ]);
+  }),
+);
+
+it.effect("does not fall back when context non-open listing returns invalid JSON", () =>
+  Effect.gen(function* () {
+    const executeInputs: Parameters<GitHubCli.GitHubCliShape["execute"]>[0][] = [];
+    const provider = yield* makeProvider({
+      execute: (input) => {
+        executeInputs.push(input);
+        return Effect.succeed(processResult("{"));
+      },
+    });
+
+    const result = yield* provider
+      .listChangeRequests({
+        cwd: "/repo",
+        context: {
+          provider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+          remoteName: "origin",
+          remoteUrl: "git@github.com:felixfong227/t3code.git",
+        },
+        headSelector: "feature/bad-json",
+        state: "all",
+        limit: 10,
+      })
+      .pipe(Effect.exit);
+
+    assert.strictEqual(result._tag, "Failure");
+    assert.strictEqual(executeInputs.length, 1);
+    assert.deepStrictEqual(executeInputs[0]?.args.slice(0, 5), [
+      "pr",
+      "list",
+      "--repo",
+      "felixfong227/t3code",
+      "--head",
+    ]);
   }),
 );
 

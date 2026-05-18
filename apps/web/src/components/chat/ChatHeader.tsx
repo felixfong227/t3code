@@ -6,7 +6,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime";
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
 import { DiffIcon, TerminalSquareIcon } from "lucide-react";
@@ -18,6 +18,8 @@ import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
+import { readLocalApi } from "../../localApi";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -90,6 +92,29 @@ export const ChatHeader = memo(function ChatHeader({
     activeThreadEnvironmentId,
     primaryEnvironmentId,
   });
+  const openChangeRequest = useCallback(() => {
+    const prUrl = activeThreadChangeRequestStatus?.url;
+    if (!prUrl) return;
+
+    const api = readLocalApi();
+    if (!api) {
+      toastManager.add({
+        type: "error",
+        title: "Link opening is unavailable.",
+      });
+      return;
+    }
+
+    void api.shell.openExternal(prUrl).catch((error: unknown) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Unable to open pull request link",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    });
+  }, [activeThreadChangeRequestStatus?.url]);
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -99,9 +124,11 @@ export const ChatHeader = memo(function ChatHeader({
           <Tooltip>
             <TooltipTrigger
               render={
-                <span
+                <button
+                  type="button"
                   aria-label={activeThreadChangeRequestStatus.tooltip}
-                  className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border/70 px-1.5 text-xs font-medium ${activeThreadChangeRequestStatus.colorClass}`}
+                  className={`inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border/70 px-1.5 text-xs font-medium outline-hidden transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-ring ${activeThreadChangeRequestStatus.colorClass}`}
+                  onClick={openChangeRequest}
                 />
               }
             >
