@@ -168,7 +168,7 @@ function draftMergeRequestTitle(title: string, draft: boolean | undefined): stri
     return title;
   }
   const trimmed = title.trim();
-  if (/^(?:draft:|\[draft\]|\(draft\))/iu.test(trimmed)) {
+  if (/^(?:draft:|\[draft\]|\(draft\)|wip:)/iu.test(trimmed)) {
     return title;
   }
   return "Draft: " + trimmed;

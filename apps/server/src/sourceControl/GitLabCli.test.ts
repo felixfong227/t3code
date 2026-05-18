@@ -338,6 +338,27 @@ layer("GitLabCli.layer", (it) => {
     }),
   );
 
+  it.effect("does not double-prefix legacy WIP draft merge request titles", () =>
+    Effect.gen(function* () {
+      mockedRun.mockReturnValueOnce(Effect.succeed(processOutput("{}")));
+
+      const glab = yield* GitLabCli.GitLabCli;
+      yield* glab.createMergeRequest({
+        cwd: "/repo",
+        repository: "pingdotgg/t3code",
+        baseBranch: "main",
+        headSelector: "feature/provider",
+        title: "WIP: Provider MR",
+        bodyFile: "/tmp/t3-mr-body.md",
+        draft: true,
+      });
+
+      const call = mockedRun.mock.calls[0]?.[0];
+      expect(call?.args).toContain("title=WIP: Provider MR");
+      expect(call?.args).not.toContain("title=Draft: WIP: Provider MR");
+    }),
+  );
+
   it.effect("reads the default branch from an explicit repository", () =>
     Effect.gen(function* () {
       mockedRun.mockReturnValueOnce(

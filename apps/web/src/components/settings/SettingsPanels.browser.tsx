@@ -1429,7 +1429,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
 
     await followHistory.click();
     expect(updateSettings).toHaveBeenCalledWith({
-      gitAutomation: expect.objectContaining({ followCommitHistory: false }),
+      gitAutomation: { followCommitHistory: false },
     });
     updateSettings.mockClear();
 
@@ -1440,9 +1440,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
     (document.activeElement as HTMLElement | null)?.blur();
 
     expect(updateSettings).toHaveBeenCalledWith({
-      gitAutomation: expect.objectContaining({
-        commitStyleInstructions: "Use CP ticket prefixes when present.",
-      }),
+      gitAutomation: { commitStyleInstructions: "Use CP ticket prefixes when present." },
     });
   });
 
@@ -1500,9 +1498,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
     (document.activeElement as HTMLElement | null)?.blur();
 
     expect(updateSettings).toHaveBeenCalledWith({
-      gitAutomation: expect.objectContaining({
-        pullRequestTitleInstructions: "Use conventional style ",
-      }),
+      gitAutomation: { pullRequestTitleInstructions: "Use conventional style " },
     });
   });
 

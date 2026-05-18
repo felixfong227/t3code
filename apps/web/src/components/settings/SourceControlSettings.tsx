@@ -542,7 +542,7 @@ function GitAutomationSettings() {
   const { updateSettings } = useUpdateSettings();
   const defaults = DEFAULT_UNIFIED_SETTINGS.gitAutomation;
   const updateGitAutomation = (patch: Partial<typeof gitAutomation>) => {
-    updateSettings({ gitAutomation: { ...gitAutomation, ...patch } });
+    updateSettings({ gitAutomation: patch });
   };
 
   return (
