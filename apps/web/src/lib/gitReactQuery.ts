@@ -1,6 +1,7 @@
 import {
   type EnvironmentId,
   type GitActionProgressEvent,
+  type GitPullRequestTargetRemote,
   type GitStackedAction,
   type SourceControlPublishRepositoryInput,
   type ThreadId,
@@ -182,6 +183,7 @@ export function gitRunStackedActionMutationOptions(input: {
       commitMessage,
       featureBranch,
       filePaths,
+      pullRequestTargetRemote,
       onProgress,
     }: {
       actionId: string;
@@ -189,6 +191,7 @@ export function gitRunStackedActionMutationOptions(input: {
       commitMessage?: string;
       featureBranch?: boolean;
       filePaths?: string[];
+      pullRequestTargetRemote?: GitPullRequestTargetRemote;
       onProgress?: (event: GitActionProgressEvent) => void;
     }) => {
       if (!input.cwd || !input.environmentId) throw new Error("Git action is unavailable.");
@@ -200,6 +203,7 @@ export function gitRunStackedActionMutationOptions(input: {
           ...(commitMessage ? { commitMessage } : {}),
           ...(featureBranch ? { featureBranch: true } : {}),
           ...(filePaths && filePaths.length > 0 ? { filePaths } : {}),
+          ...(pullRequestTargetRemote ? { pullRequestTargetRemote } : {}),
         },
         ...(onProgress ? [{ onProgress }] : []),
       );

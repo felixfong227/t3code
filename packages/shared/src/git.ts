@@ -8,6 +8,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Random from "effect/Random";
+import gitUrlParse from "git-url-parse";
 import { detectSourceControlProviderFromRemoteUrl } from "./sourceControl.ts";
 
 export const WORKTREE_BRANCH_PREFIX = "t3code";
@@ -105,24 +106,9 @@ export function normalizeGitRemoteUrl(value: string): string {
     .replace(/\.git$/i, "")
     .toLowerCase();
 
-  if (/^(?:ssh|https?|git):\/\//i.test(normalized)) {
-    try {
-      const url = new URL(normalized);
-      const repositoryPath = url.pathname
-        .split("/")
-        .filter((segment) => segment.length > 0)
-        .join("/");
-      if (url.hostname && repositoryPath.includes("/")) {
-        return `${url.hostname}/${repositoryPath}`;
-      }
-    } catch {
-      return normalized;
-    }
-  }
-
-  const scpStyleHostAndPath = /^git@([^:/\s]+)[:/]([^/\s]+(?:\/[^/\s]+)+)$/i.exec(normalized);
-  if (scpStyleHostAndPath?.[1] && scpStyleHostAndPath[2]) {
-    return `${scpStyleHostAndPath[1]}/${scpStyleHostAndPath[2]}`;
+  const parsed = parseGitRemote(normalized);
+  if (parsed) {
+    return `${parsed.host}/${parsed.repositoryPath}`;
   }
 
   return normalized;
@@ -143,6 +129,41 @@ export function parseGitHubRepositoryNameWithOwnerFromRemoteUrl(url: string | nu
     );
   const repositoryNameWithOwner = match?.[1]?.trim() ?? "";
   return repositoryNameWithOwner.length > 0 ? repositoryNameWithOwner : null;
+}
+
+function normalizeRepositoryPath(path: string): string | null {
+  const repositoryPath = path
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\.git$/i, "")
+    .trim();
+  return repositoryPath.includes("/") ? repositoryPath : null;
+}
+
+function parseGitRemote(value: string): { host: string; repositoryPath: string } | null {
+  try {
+    const parsed = gitUrlParse(value);
+    const host = (parsed.resource || parsed.source || parsed.host).trim();
+    const repositoryPath = normalizeRepositoryPath(parsed.full_name);
+    if (!host || !repositoryPath) {
+      return null;
+    }
+    return { host, repositoryPath };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort parse of a hosted repository path from common git remote URL shapes.
+ * GitHub paths are usually `owner/repo`; GitLab paths may include nested groups.
+ */
+export function parseRepositoryPathFromRemoteUrl(url: string | null): string | null {
+  const trimmed = url?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return parseGitRemote(trimmed)?.repositoryPath ?? null;
 }
 
 function deriveLocalBranchNameCandidatesFromRemoteRef(
@@ -235,6 +256,9 @@ function toLocalStatusPart(status: VcsStatusResult): VcsStatusLocalResult {
       ? { sourceControlProvider: status.sourceControlProvider }
       : {}),
     hasPrimaryRemote: status.hasPrimaryRemote,
+    ...(status.pullRequestTargetRemotes
+      ? { pullRequestTargetRemotes: status.pullRequestTargetRemotes }
+      : {}),
     isDefaultRef: status.isDefaultRef,
     refName: status.refName,
     hasWorkingTreeChanges: status.hasWorkingTreeChanges,

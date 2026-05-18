@@ -1,6 +1,7 @@
 import { type ScopedThreadRef } from "@t3tools/contracts";
 import type {
   GitActionProgressEvent,
+  GitPullRequestTargetRemote,
   GitRunStackedActionResult,
   GitStackedAction,
   SourceControlCloneProtocol,
@@ -60,6 +61,13 @@ import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager, type ThreadToastData } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -81,6 +89,7 @@ import { readLocalApi } from "~/localApi";
 import { getSourceControlPresentation } from "~/sourceControlPresentation";
 import { useStore } from "~/store";
 import { createThreadSelectorByRef } from "~/storeSelectors";
+import { useSettings } from "~/hooks/useSettings";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
@@ -92,8 +101,20 @@ interface PendingDefaultBranchAction {
   action: DefaultBranchConfirmableAction;
   branchName: string;
   includesCommit: boolean;
+  pullRequestTargetRemote?: GitPullRequestTargetRemote;
   commitMessage?: string;
   onConfirmed?: () => void;
+  filePaths?: string[];
+}
+
+interface PendingPullRequestTargetAction {
+  action: GitStackedAction;
+  commitMessage?: string;
+  onConfirmed?: () => void;
+  skipDefaultBranchPrompt?: boolean;
+  statusOverride?: VcsStatusResult | null;
+  featureBranch?: boolean;
+  progressToastId?: GitActionToastId;
   filePaths?: string[];
 }
 
@@ -125,9 +146,19 @@ interface RunGitActionWithToastInput {
   featureBranch?: boolean;
   progressToastId?: GitActionToastId;
   filePaths?: string[];
+  pullRequestTargetRemote?: GitPullRequestTargetRemote;
 }
 
 const GIT_STATUS_WINDOW_REFRESH_DEBOUNCE_MS = 250;
+const PULL_REQUEST_TARGET_LABELS = {
+  default: "Default",
+  origin: "Origin",
+  upstream: "Upstream",
+} as const satisfies Record<GitPullRequestTargetRemote, string>;
+
+function isPullRequestAction(action: GitStackedAction): boolean {
+  return action === "create_pr" || action === "commit_push_pr";
+}
 
 const PUBLISH_PROVIDER_OPTIONS = [
   {
@@ -969,6 +1000,9 @@ export default function GitActionsControl({
   );
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const setThreadBranch = useStore((store) => store.setThreadBranch);
+  const pullRequestTargetRemotePreference = useSettings(
+    (settings) => settings.pullRequestTargetRemotePreference,
+  );
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [dialogCommitMessage, setDialogCommitMessage] = useState("");
@@ -977,6 +1011,10 @@ export default function GitActionsControl({
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
     useState<PendingDefaultBranchAction | null>(null);
+  const [pendingPullRequestTargetAction, setPendingPullRequestTargetAction] =
+    useState<PendingPullRequestTargetAction | null>(null);
+  const [selectedPullRequestTargetRemote, setSelectedPullRequestTargetRemote] =
+    useState<GitPullRequestTargetRemote>("default");
   const activeGitActionProgressRef = useRef<ActiveGitActionProgress | null>(null);
   let runGitActionWithToast: (input: RunGitActionWithToastInput) => Promise<void>;
 
@@ -1242,10 +1280,38 @@ export default function GitActionsControl({
       featureBranch = false,
       progressToastId,
       filePaths,
+      pullRequestTargetRemote,
     }: RunGitActionWithToastInput) => {
       const actionStatus = statusOverride ?? gitStatusForActions;
       const actionBranch = actionStatus?.refName ?? null;
       const actionIsDefaultBranch = featureBranch ? false : isDefaultRef;
+      const actionTargetsPullRequest = isPullRequestAction(action);
+      const availablePullRequestTargetRemotes = actionStatus?.pullRequestTargetRemotes ?? [];
+      const shouldAskPullRequestTarget =
+        actionTargetsPullRequest &&
+        !pullRequestTargetRemote &&
+        pullRequestTargetRemotePreference === "ask" &&
+        availablePullRequestTargetRemotes.includes("origin") &&
+        availablePullRequestTargetRemotes.includes("upstream");
+      if (shouldAskPullRequestTarget) {
+        setSelectedPullRequestTargetRemote("default");
+        setPendingPullRequestTargetAction({
+          action,
+          ...(commitMessage ? { commitMessage } : {}),
+          ...(onConfirmed ? { onConfirmed } : {}),
+          ...(skipDefaultBranchPrompt ? { skipDefaultBranchPrompt } : {}),
+          ...(statusOverride !== undefined ? { statusOverride } : {}),
+          ...(featureBranch ? { featureBranch } : {}),
+          ...(progressToastId ? { progressToastId } : {}),
+          ...(filePaths ? { filePaths } : {}),
+        });
+        return;
+      }
+      const resolvedPullRequestTargetRemote =
+        pullRequestTargetRemote ??
+        (actionTargetsPullRequest && pullRequestTargetRemotePreference !== "ask"
+          ? pullRequestTargetRemotePreference
+          : undefined);
       const actionCanCommit =
         action === "commit" || action === "commit_push" || action === "commit_push_pr";
       const includesCommit =
@@ -1268,6 +1334,9 @@ export default function GitActionsControl({
           action,
           branchName: actionBranch,
           includesCommit,
+          ...(resolvedPullRequestTargetRemote
+            ? { pullRequestTargetRemote: resolvedPullRequestTargetRemote }
+            : {}),
           ...(commitMessage ? { commitMessage } : {}),
           ...(onConfirmed ? { onConfirmed } : {}),
           ...(filePaths ? { filePaths } : {}),
@@ -1382,6 +1451,9 @@ export default function GitActionsControl({
         ...(commitMessage ? { commitMessage } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
+        ...(resolvedPullRequestTargetRemote
+          ? { pullRequestTargetRemote: resolvedPullRequestTargetRemote }
+          : {}),
         onProgress: applyProgressEvent,
       });
 
@@ -1463,28 +1535,58 @@ export default function GitActionsControl({
 
   const continuePendingDefaultBranchAction = () => {
     if (!pendingDefaultBranchAction) return;
-    const { action, commitMessage, onConfirmed, filePaths } = pendingDefaultBranchAction;
+    const { action, commitMessage, onConfirmed, filePaths, pullRequestTargetRemote } =
+      pendingDefaultBranchAction;
     setPendingDefaultBranchAction(null);
     void runGitActionWithToast({
       action,
       ...(commitMessage ? { commitMessage } : {}),
       ...(onConfirmed ? { onConfirmed } : {}),
       ...(filePaths ? { filePaths } : {}),
+      ...(pullRequestTargetRemote ? { pullRequestTargetRemote } : {}),
       skipDefaultBranchPrompt: true,
     });
   };
 
   const checkoutFeatureBranchAndContinuePendingAction = () => {
     if (!pendingDefaultBranchAction) return;
-    const { action, commitMessage, onConfirmed, filePaths } = pendingDefaultBranchAction;
+    const { action, commitMessage, onConfirmed, filePaths, pullRequestTargetRemote } =
+      pendingDefaultBranchAction;
     setPendingDefaultBranchAction(null);
     void runGitActionWithToast({
       action,
       ...(commitMessage ? { commitMessage } : {}),
       ...(onConfirmed ? { onConfirmed } : {}),
       ...(filePaths ? { filePaths } : {}),
+      ...(pullRequestTargetRemote ? { pullRequestTargetRemote } : {}),
       featureBranch: true,
       skipDefaultBranchPrompt: true,
+    });
+  };
+
+  const continuePendingPullRequestTargetAction = () => {
+    if (!pendingPullRequestTargetAction) return;
+    const {
+      action,
+      commitMessage,
+      onConfirmed,
+      skipDefaultBranchPrompt,
+      statusOverride,
+      featureBranch,
+      progressToastId,
+      filePaths,
+    } = pendingPullRequestTargetAction;
+    setPendingPullRequestTargetAction(null);
+    void runGitActionWithToast({
+      action,
+      ...(commitMessage ? { commitMessage } : {}),
+      ...(onConfirmed ? { onConfirmed } : {}),
+      ...(skipDefaultBranchPrompt ? { skipDefaultBranchPrompt } : {}),
+      ...(statusOverride !== undefined ? { statusOverride } : {}),
+      ...(featureBranch ? { featureBranch } : {}),
+      ...(progressToastId ? { progressToastId } : {}),
+      ...(filePaths ? { filePaths } : {}),
+      pullRequestTargetRemote: selectedPullRequestTargetRemote,
     });
   };
 
@@ -1937,6 +2039,63 @@ export default function GitActionsControl({
         environmentId={activeEnvironmentId}
         gitCwd={gitCwd}
       />
+
+      <Dialog
+        open={pendingPullRequestTargetAction !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingPullRequestTargetAction(null);
+          }
+        }}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose pull request target</DialogTitle>
+            <DialogDescription>
+              Select which remote repository should receive the pull request.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <Select
+              value={selectedPullRequestTargetRemote}
+              onValueChange={(value) => {
+                if (value === "default" || value === "origin" || value === "upstream") {
+                  setSelectedPullRequestTargetRemote(value);
+                }
+              }}
+            >
+              <SelectTrigger className="w-full" aria-label="Pull request target remote">
+                <SelectValue>
+                  {PULL_REQUEST_TARGET_LABELS[selectedPullRequestTargetRemote]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="start" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="default">
+                  Default
+                </SelectItem>
+                <SelectItem hideIndicator value="origin">
+                  Origin
+                </SelectItem>
+                <SelectItem hideIndicator value="upstream">
+                  Upstream
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          </DialogPanel>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPendingPullRequestTargetAction(null)}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={continuePendingPullRequestTargetAction}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog
         open={pendingDefaultBranchAction !== null}

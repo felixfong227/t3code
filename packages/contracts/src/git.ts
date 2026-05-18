@@ -16,6 +16,8 @@ export const GitStackedAction = Schema.Literals([
   "commit_push_pr",
 ]);
 export type GitStackedAction = typeof GitStackedAction.Type;
+export const GitPullRequestTargetRemote = Schema.Literals(["origin", "upstream", "default"]);
+export type GitPullRequestTargetRemote = typeof GitPullRequestTargetRemote.Type;
 export const GitActionProgressPhase = Schema.Literals(["branch", "commit", "push", "pr"]);
 export type GitActionProgressPhase = typeof GitActionProgressPhase.Type;
 export const GitActionProgressKind = Schema.Literals([
@@ -118,6 +120,7 @@ export const GitRunStackedActionInput = Schema.Struct({
   filePaths: Schema.optional(
     Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
   ),
+  pullRequestTargetRemote: Schema.optional(GitPullRequestTargetRemote),
 });
 export type GitRunStackedActionInput = typeof GitRunStackedActionInput.Type;
 
@@ -198,6 +201,7 @@ const VcsStatusChangeRequest = Schema.Struct({
 const VcsStatusLocalShape = {
   isRepo: Schema.Boolean,
   sourceControlProvider: Schema.optional(SourceControlProviderInfo),
+  pullRequestTargetRemotes: Schema.optional(Schema.Array(GitPullRequestTargetRemote)),
   hasPrimaryRemote: Schema.Boolean,
   isDefaultRef: Schema.Boolean,
   refName: Schema.NullOr(TrimmedNonEmptyStringSchema),

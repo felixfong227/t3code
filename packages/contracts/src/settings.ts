@@ -101,6 +101,13 @@ export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientS
 
 export const ThreadEnvMode = Schema.Literals(["local", "worktree"]);
 export type ThreadEnvMode = typeof ThreadEnvMode.Type;
+export const PullRequestTargetRemotePreference = Schema.Literals([
+  "ask",
+  "origin",
+  "upstream",
+  "default",
+]);
+export type PullRequestTargetRemotePreference = typeof PullRequestTargetRemotePreference.Type;
 
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
@@ -358,6 +365,9 @@ export const ServerSettings = Schema.Struct({
       }),
     ),
   ),
+  pullRequestTargetRemotePreference: PullRequestTargetRemotePreference.pipe(
+    Schema.withDecodingDefault(Effect.succeed("ask" as const)),
+  ),
 
   // Legacy single-instance-per-driver settings. Continues to be the source
   // of truth until `providerInstances` (below) lands per-driver migration
@@ -452,6 +462,7 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  pullRequestTargetRemotePreference: Schema.optionalKey(PullRequestTargetRemotePreference),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),

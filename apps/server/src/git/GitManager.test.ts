@@ -46,6 +46,7 @@ interface FakeGhScenario {
   prListSequence?: string[];
   prListByHeadSelector?: Record<string, string>;
   prListSequenceByHeadSelector?: Record<string, string[]>;
+  prListSequenceByRepositoryAndHeadSelector?: Record<string, string[]>;
   createdPrUrl?: string;
   defaultBranch?: string;
   pullRequest?: {
@@ -395,6 +396,11 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       [...values],
     ]),
   );
+  const prListQueueByRepositoryAndHeadSelector = new Map(
+    Object.entries(scenario.prListSequenceByRepositoryAndHeadSelector ?? {}).map(
+      ([selector, values]) => [selector, [...values]],
+    ),
+  );
   const ghCalls: string[] = [];
 
   const execute: GitHubCliShape["execute"] = (input) => {
@@ -406,10 +412,19 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
     }
 
     if (args[0] === "pr" && args[1] === "list") {
+      const repositoryIndex = args.findIndex((value) => value === "--repo");
+      const repository =
+        repositoryIndex >= 0 && repositoryIndex < args.length - 1
+          ? args[repositoryIndex + 1]
+          : undefined;
       const headSelectorIndex = args.findIndex((value) => value === "--head");
       const headSelector =
         headSelectorIndex >= 0 && headSelectorIndex < args.length - 1
           ? args[headSelectorIndex + 1]
+          : undefined;
+      const mappedRepositoryQueue =
+        typeof repository === "string" && typeof headSelector === "string"
+          ? prListQueueByRepositoryAndHeadSelector.get(`${repository}\0${headSelector}`)?.shift()
           : undefined;
       const mappedQueue =
         typeof headSelector === "string"
@@ -419,7 +434,9 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         typeof headSelector === "string"
           ? scenario.prListByHeadSelector?.[headSelector]
           : undefined;
-      const stdout = (mappedQueue ?? mappedStdout ?? prListQueue.shift() ?? "[]") + "\n";
+      const stdout =
+        (mappedRepositoryQueue ?? mappedQueue ?? mappedStdout ?? prListQueue.shift() ?? "[]") +
+        "\n";
       return Effect.succeed(fakeGhOutput(stdout));
     }
 
@@ -539,6 +556,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           args: [
             "pr",
             "list",
+            ...(input.repository ? ["--repo", input.repository] : []),
             "--head",
             input.headSelector,
             "--state",
@@ -562,6 +580,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           args: [
             "pr",
             "create",
+            ...(input.repository ? ["--repo", input.repository] : []),
             "--base",
             input.baseBranch,
             "--head",
@@ -575,7 +594,15 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       getDefaultBranch: (input) =>
         execute({
           cwd: input.cwd,
-          args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+          args: [
+            "repo",
+            "view",
+            ...(input.repository ? [input.repository] : []),
+            "--json",
+            "defaultBranchRef",
+            "--jq",
+            ".defaultBranchRef.name",
+          ],
         }).pipe(
           Effect.map((result) => {
             const value = result.stdout.trim();
@@ -624,6 +651,7 @@ function runStackedAction(
     commitMessage?: string;
     featureBranch?: boolean;
     filePaths?: readonly string[];
+    pullRequestTargetRemote?: "origin" | "upstream" | "default";
   },
   options?: Parameters<GitManagerShape["runStackedAction"]>[1],
 ) {
@@ -2385,6 +2413,202 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           call.includes("pr create --base statemachine --head octocat:statemachine"),
         ),
       ).toBe(false);
+    }),
+  );
+
+  it.effect("creates fork PRs from origin branches against an upstream base repo", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const forkDir = yield* createBareRemote();
+      const upstreamDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", forkDir]);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamDir]);
+      yield* runGit(repoDir, ["checkout", "-b", "felix/integrate-pr-2305-1003"]);
+      fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+      yield* runGit(repoDir, ["add", "changes.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "felix/integrate-pr-2305-1003"]);
+      yield* configureVisibleRemoteUrlWithLocalRewrite(
+        repoDir,
+        "origin",
+        "git@github.com:felixfong227/t3code.git",
+        forkDir,
+      );
+      yield* configureVisibleRemoteUrlWithLocalRewrite(
+        repoDir,
+        "upstream",
+        "git@github.com:pingdotgg/t3code.git",
+        upstreamDir,
+      );
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequenceByHeadSelector: {
+            "felixfong227:felix/integrate-pr-2305-1003": [
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([
+                {
+                  number: 2305,
+                  title: "Add diff context comment drafts and collapsible sidebar",
+                  url: "https://github.com/pingdotgg/t3code/pull/2305",
+                  baseRefName: "main",
+                  headRefName: "felix/integrate-pr-2305-1003",
+                  state: "OPEN",
+                  isCrossRepository: true,
+                  headRepository: {
+                    nameWithOwner: "felixfong227/t3code",
+                  },
+                  headRepositoryOwner: {
+                    login: "felixfong227",
+                  },
+                },
+              ]),
+            ],
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            "origin:felix/integrate-pr-2305-1003": [JSON.stringify([])],
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            "felix/integrate-pr-2305-1003": [JSON.stringify([])],
+          },
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(result.pr.number).toBe(2305);
+      expect(ghCalls.join("\n")).toContain(
+        "pr create --repo pingdotgg/t3code --base main --head felixfong227:felix/integrate-pr-2305-1003",
+      );
+    }),
+  );
+
+  it.effect("creates PRs against origin when explicitly selected", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const forkDir = yield* createBareRemote();
+      const upstreamDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", forkDir]);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamDir]);
+      yield* runGit(repoDir, ["checkout", "-b", "felix/integrate-pr-2305-1003"]);
+      fs.writeFileSync(path.join(repoDir, "origin-target.txt"), "change\n");
+      yield* runGit(repoDir, ["add", "origin-target.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "felix/integrate-pr-2305-1003"]);
+      yield* configureVisibleRemoteUrlWithLocalRewrite(
+        repoDir,
+        "origin",
+        "git@github.com:felixfong227/t3code.git",
+        forkDir,
+      );
+      yield* configureVisibleRemoteUrlWithLocalRewrite(
+        repoDir,
+        "upstream",
+        "git@github.com:pingdotgg/t3code.git",
+        upstreamDir,
+      );
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequenceByHeadSelector: {
+            "felix/integrate-pr-2305-1003": [
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([
+                {
+                  number: 2306,
+                  title: "Add origin-target PR",
+                  url: "https://github.com/felixfong227/t3code/pull/2306",
+                  baseRefName: "main",
+                  headRefName: "felix/integrate-pr-2305-1003",
+                  state: "OPEN",
+                  isCrossRepository: false,
+                  headRepository: {
+                    nameWithOwner: "felixfong227/t3code",
+                  },
+                  headRepositoryOwner: {
+                    login: "felixfong227",
+                  },
+                },
+              ]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([
+                {
+                  number: 2306,
+                  title: "Add origin-target PR",
+                  url: "https://github.com/felixfong227/t3code/pull/2306",
+                  baseRefName: "main",
+                  headRefName: "felix/integrate-pr-2305-1003",
+                  state: "OPEN",
+                  isCrossRepository: false,
+                  headRepository: {
+                    nameWithOwner: "felixfong227/t3code",
+                  },
+                  headRepositoryOwner: {
+                    login: "felixfong227",
+                  },
+                },
+              ]),
+            ],
+          },
+          prListByHeadSelector: {
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            "felix/integrate-pr-2305-1003": JSON.stringify([
+              {
+                number: 2306,
+                title: "Add origin-target PR",
+                url: "https://github.com/felixfong227/t3code/pull/2306",
+                baseRefName: "main",
+                headRefName: "felix/integrate-pr-2305-1003",
+                state: "OPEN",
+                isCrossRepository: false,
+                headRepository: {
+                  nameWithOwner: "felixfong227/t3code",
+                },
+                headRepositoryOwner: {
+                  login: "felixfong227",
+                },
+              },
+            ]),
+          },
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+        pullRequestTargetRemote: "origin",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(result.pr.number).toBe(2306);
+      const status = yield* manager.status({ cwd: repoDir });
+      expect(status.pr?.number).toBe(2306);
+      expect(ghCalls.join("\n")).toContain(
+        "pr create --repo felixfong227/t3code --base main --head felix/integrate-pr-2305-1003",
+      );
+      expect(ghCalls.join("\n")).toContain(
+        "pr list --repo felixfong227/t3code --head felix/integrate-pr-2305-1003",
+      );
+
+      fs.writeFileSync(path.join(repoDir, "origin-target-follow-up.txt"), "follow-up\n");
+      const pushResult = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push",
+      });
+
+      expect(pushResult.toast.cta).toEqual({
+        kind: "open_pr",
+        label: "View PR",
+        url: "https://github.com/felixfong227/t3code/pull/2306",
+      });
     }),
   );
 

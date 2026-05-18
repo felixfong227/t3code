@@ -5,6 +5,7 @@ import {
   getChangeRequestTerminologyForKind,
   resolveChangeRequestPresentation,
 } from "./sourceControl.ts";
+import { parseRepositoryPathFromRemoteUrl } from "./git.ts";
 
 describe("source control presentation", () => {
   it("uses merge request terminology for GitLab", () => {
@@ -55,5 +56,22 @@ describe("detectSourceControlProviderFromRemoteUrl", () => {
     expect(
       detectSourceControlProviderFromRemoteUrl("git@bitbucket.org:workspace/repo.git")?.kind,
     ).toBe("bitbucket");
+  });
+});
+
+describe("parseRepositoryPathFromRemoteUrl", () => {
+  it("parses GitLab project paths with nested groups", () => {
+    expect(parseRepositoryPathFromRemoteUrl("git@gitlab.com:group/subgroup/t3code.git")).toBe(
+      "group/subgroup/t3code",
+    );
+    expect(
+      parseRepositoryPathFromRemoteUrl("https://gitlab.example.com/group/subgroup/t3code.git"),
+    ).toBe("group/subgroup/t3code");
+  });
+
+  it("parses GitHub owner/repo remote URLs", () => {
+    expect(parseRepositoryPathFromRemoteUrl("git@github.com:owner/t3code.git")).toBe(
+      "owner/t3code",
+    );
   });
 });

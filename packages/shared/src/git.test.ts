@@ -7,6 +7,7 @@ import {
   isTemporaryWorktreeBranch,
   normalizeGitRemoteUrl,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
+  parseRepositoryPathFromRemoteUrl,
   WORKTREE_BRANCH_PREFIX,
 } from "./git.ts";
 
@@ -50,6 +51,26 @@ describe("parseGitHubRepositoryNameWithOwnerFromRemoteUrl", () => {
     expect(
       parseGitHubRepositoryNameWithOwnerFromRemoteUrl("https://github.com/T3Tools/T3Code.git"),
     ).toBe("T3Tools/T3Code");
+  });
+});
+
+describe("parseRepositoryPathFromRemoteUrl", () => {
+  it("uses URL-shaped remote paths", () => {
+    expect(parseRepositoryPathFromRemoteUrl("https://github.com/T3Tools/T3Code.git")).toBe(
+      "T3Tools/T3Code",
+    );
+    expect(
+      parseRepositoryPathFromRemoteUrl("ssh://git@gitlab.com/T3Tools/platform/T3Code.git"),
+    ).toBe("T3Tools/platform/T3Code");
+  });
+
+  it("supports Git scp-style remotes", () => {
+    expect(parseRepositoryPathFromRemoteUrl("git@github.com:T3Tools/T3Code.git")).toBe(
+      "T3Tools/T3Code",
+    );
+    expect(parseRepositoryPathFromRemoteUrl("git@gitlab.com:T3Tools/platform/T3Code.git")).toBe(
+      "T3Tools/platform/T3Code",
+    );
   });
 });
 
@@ -103,6 +124,7 @@ describe("applyGitStatusStreamEvent", () => {
         baseUrl: "https://github.com",
       },
       hasPrimaryRemote: true,
+      pullRequestTargetRemotes: ["origin", "upstream"],
       isDefaultRef: false,
       refName: "feature/demo",
       hasWorkingTreeChanges: true,

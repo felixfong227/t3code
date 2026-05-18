@@ -54,6 +54,7 @@ export interface GitHubCliShape {
   readonly listOpenPullRequests: (input: {
     readonly cwd: string;
     readonly headSelector: string;
+    readonly repository?: string;
     readonly limit?: number;
   }) => Effect.Effect<ReadonlyArray<GitHubPullRequestSummary>, GitHubCliError>;
 
@@ -77,12 +78,14 @@ export interface GitHubCliShape {
     readonly cwd: string;
     readonly baseBranch: string;
     readonly headSelector: string;
+    readonly repository?: string;
     readonly title: string;
     readonly bodyFile: string;
   }) => Effect.Effect<void, GitHubCliError>;
 
   readonly getDefaultBranch: (input: {
     readonly cwd: string;
+    readonly repository?: string;
   }) => Effect.Effect<string | null, GitHubCliError>;
 
   readonly checkoutPullRequest: (input: {
@@ -248,6 +251,7 @@ export const make = Effect.fn("makeGitHubCli")(function* () {
         args: [
           "pr",
           "list",
+          ...(input.repository ? ["--repo", input.repository] : []),
           "--head",
           input.headSelector,
           "--state",
@@ -344,6 +348,7 @@ export const make = Effect.fn("makeGitHubCli")(function* () {
         args: [
           "pr",
           "create",
+          ...(input.repository ? ["--repo", input.repository] : []),
           "--base",
           input.baseBranch,
           "--head",
@@ -357,7 +362,15 @@ export const make = Effect.fn("makeGitHubCli")(function* () {
     getDefaultBranch: (input) =>
       execute({
         cwd: input.cwd,
-        args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+        args: [
+          "repo",
+          "view",
+          ...(input.repository ? [input.repository] : []),
+          "--json",
+          "defaultBranchRef",
+          "--jq",
+          ".defaultBranchRef.name",
+        ],
       }).pipe(
         Effect.map((value) => {
           const trimmed = value.stdout.trim();
