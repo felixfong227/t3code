@@ -3550,6 +3550,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
         "Ask before commands and file changes",
       );
 
+      expect((await waitForSelectItemContainingText("Auto-review")).textContent).toContain(
+        "Let Codex review approvals automatically",
+      );
+
       const autoAcceptItem = await waitForSelectItemContainingText("Auto-accept edits");
       expect(autoAcceptItem.textContent).toContain("Auto-approve edits");
       expect((await waitForSelectItemContainingText("Full access")).textContent).toContain(

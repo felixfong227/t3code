@@ -260,6 +260,7 @@ function readResumeCursorThreadId(
 
 function runtimeModeToThreadConfig(input: RuntimeMode): {
   readonly approvalPolicy: EffectCodexSchema.V2ThreadStartParams__AskForApproval;
+  readonly approvalsReviewer?: EffectCodexSchema.V2ThreadStartParams__ApprovalsReviewer;
   readonly sandbox: EffectCodexSchema.V2ThreadStartParams__SandboxMode;
 } {
   switch (input) {
@@ -271,6 +272,12 @@ function runtimeModeToThreadConfig(input: RuntimeMode): {
     case "auto-accept-edits":
       return {
         approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+      };
+    case "codex-auto-review":
+      return {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
         sandbox: "workspace-write",
       };
     case "full-access":
@@ -292,6 +299,7 @@ function buildThreadStartParams(input: {
   return {
     cwd: input.cwd,
     approvalPolicy: config.approvalPolicy,
+    ...(config.approvalsReviewer ? { approvalsReviewer: config.approvalsReviewer } : {}),
     sandbox: config.sandbox,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
@@ -307,6 +315,7 @@ function runtimeModeToTurnSandboxPolicy(
         type: "readOnly",
       };
     case "auto-accept-edits":
+    case "codex-auto-review":
       return {
         type: "workspaceWrite",
       };
@@ -378,6 +387,7 @@ export function buildTurnStartParams(input: {
     threadId: input.threadId,
     input: turnInput,
     approvalPolicy: config.approvalPolicy,
+    ...(config.approvalsReviewer ? { approvalsReviewer: config.approvalsReviewer } : {}),
     sandboxPolicy: runtimeModeToTurnSandboxPolicy(input.runtimeMode),
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),

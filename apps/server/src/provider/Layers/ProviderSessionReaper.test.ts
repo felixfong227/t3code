@@ -5,6 +5,7 @@ import {
   TurnId,
   ProviderDriverKind,
   ProviderInstanceId,
+  RuntimeMode,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
@@ -64,7 +65,7 @@ function makeReadModel(
       readonly threadId: ThreadId;
       readonly status: "starting" | "running" | "ready" | "interrupted" | "stopped" | "error";
       readonly providerName: "codex" | "claudeAgent";
-      readonly runtimeMode: "approval-required" | "full-access" | "auto-accept-edits";
+      readonly runtimeMode: RuntimeMode;
       readonly activeTurnId: TurnId | null;
       readonly lastError: string | null;
       readonly updatedAt: string;
@@ -229,8 +230,8 @@ describe("ProviderSessionReaper", () => {
           session: {
             threadId,
             status: "ready",
-            providerName: "claudeAgent",
-            runtimeMode: "full-access",
+            providerName: "codex",
+            runtimeMode: "codex-auto-review",
             activeTurnId: null,
             lastError: null,
             updatedAt: now,
@@ -243,10 +244,10 @@ describe("ProviderSessionReaper", () => {
     await runtime!.runPromise(
       repository.upsert({
         threadId,
-        providerName: "claudeAgent",
+        providerName: "codex",
         providerInstanceId: null,
-        adapterKey: "claudeAgent",
-        runtimeMode: "full-access",
+        adapterKey: "codex",
+        runtimeMode: "codex-auto-review",
         status: "running",
         lastSeenAt: "2026-04-14T00:00:00.000Z",
         resumeCursor: {
