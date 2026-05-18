@@ -151,3 +151,45 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
   });
 });
+
+describe("ServerSettings.gitAutomation", () => {
+  it("defaults commit and pull request automation settings for legacy configs", () => {
+    const decoded = decodeServerSettings({});
+
+    expect(decoded.gitAutomation).toEqual({
+      followCommitHistory: true,
+      draftPullRequests: true,
+      commitStyleInstructions: "",
+      pullRequestTitleInstructions: "",
+      pullRequestDescriptionInstructions: "",
+    });
+  });
+
+  it("accepts partial git automation patches", () => {
+    const patch = decodeServerSettingsPatch({
+      gitAutomation: {
+        followCommitHistory: false,
+        commitStyleInstructions: "  Use ticket prefixes from branch names.  ",
+      },
+    });
+
+    expect(patch.gitAutomation).toEqual({
+      followCommitHistory: false,
+      commitStyleInstructions: "Use ticket prefixes from branch names.",
+    });
+  });
+
+  it("trims git automation string settings while decoding full settings", () => {
+    const decoded = decodeServerSettings({
+      gitAutomation: {
+        commitStyleInstructions: "  match repo commits  ",
+        pullRequestTitleInstructions: "  title style  ",
+        pullRequestDescriptionInstructions: "  description style  ",
+      },
+    });
+
+    expect(decoded.gitAutomation.commitStyleInstructions).toBe("match repo commits");
+    expect(decoded.gitAutomation.pullRequestTitleInstructions).toBe("title style");
+    expect(decoded.gitAutomation.pullRequestDescriptionInstructions).toBe("description style");
+  });
+});

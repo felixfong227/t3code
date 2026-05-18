@@ -1,7 +1,7 @@
 import { ChevronDownIcon, GitPullRequestIcon, RefreshCwIcon } from "lucide-react";
 import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   SourceControlProviderKind,
   SourceControlDiscoveryResult,
@@ -30,6 +30,7 @@ import {
   EmptyTitle,
 } from "../ui/empty";
 import { Skeleton } from "../ui/skeleton";
+import { Textarea } from "../ui/textarea";
 import {
   NumberField,
   NumberFieldDecrement,
@@ -441,6 +442,159 @@ function PullRequestTargetRemoteSettings() {
   );
 }
 
+function GitAutomationSwitchSetting({
+  label,
+  description,
+  checked,
+  defaultChecked,
+  onCheckedChange,
+}: {
+  readonly label: string;
+  readonly description: string;
+  readonly checked: boolean;
+  readonly defaultChecked: boolean;
+  readonly onCheckedChange: (checked: boolean) => void;
+}) {
+  const canReset = checked !== defaultChecked;
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="text-xs font-medium text-foreground">{label}</span>
+          <span
+            className={cn(
+              "inline-flex size-5 shrink-0 items-center justify-center transition-opacity",
+              canReset ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            aria-hidden={!canReset}
+          >
+            {canReset ? (
+              <SettingResetButton label={label} onClick={() => onCheckedChange(defaultChecked)} />
+            ) : null}
+          </span>
+        </div>
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
+    </div>
+  );
+}
+
+function GitAutomationTextareaSetting({
+  label,
+  description,
+  value,
+  defaultValue,
+  placeholder,
+  onValueChange,
+}: {
+  readonly label: string;
+  readonly description: string;
+  readonly value: string;
+  readonly defaultValue: string;
+  readonly placeholder: string;
+  readonly onValueChange: (value: string) => void;
+}) {
+  const [draftValue, setDraftValue] = useState(value);
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
+  const canResetDraft = draftValue !== defaultValue;
+  const commitDraftValue = () => {
+    if (draftValue !== value) {
+      onValueChange(draftValue);
+    }
+  };
+  const resetValue = () => {
+    setDraftValue(defaultValue);
+    onValueChange(defaultValue);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex min-w-0 items-center gap-1">
+        <span className="text-xs font-medium text-foreground">{label}</span>
+        <span
+          className={cn(
+            "inline-flex size-5 shrink-0 items-center justify-center transition-opacity",
+            canResetDraft ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+          aria-hidden={!canResetDraft}
+        >
+          {canResetDraft ? <SettingResetButton label={label} onClick={resetValue} /> : null}
+        </span>
+      </div>
+      <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">{description}</p>
+      <Textarea
+        value={draftValue}
+        placeholder={placeholder}
+        onChange={(event) => setDraftValue(event.currentTarget.value)}
+        onBlur={commitDraftValue}
+        className="min-h-24 resize-y text-xs"
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
+function GitAutomationSettings() {
+  const gitAutomation = useSettings((settings) => settings.gitAutomation);
+  const { updateSettings } = useUpdateSettings();
+  const defaults = DEFAULT_UNIFIED_SETTINGS.gitAutomation;
+  const updateGitAutomation = (patch: Partial<typeof gitAutomation>) => {
+    updateSettings({ gitAutomation: patch });
+  };
+
+  return (
+    <div className="grid gap-4 border-t border-border/60 pt-3">
+      <GitAutomationSwitchSetting
+        label="Follow previous commit history"
+        description="Use recent local commit messages as style examples when generating commit messages."
+        checked={gitAutomation.followCommitHistory}
+        defaultChecked={defaults.followCommitHistory}
+        onCheckedChange={(followCommitHistory) => updateGitAutomation({ followCommitHistory })}
+      />
+      <GitAutomationSwitchSetting
+        label="Create pull requests as draft"
+        description="Create supported pull requests as drafts when T3 Code opens a new pull request."
+        checked={gitAutomation.draftPullRequests}
+        defaultChecked={defaults.draftPullRequests}
+        onCheckedChange={(draftPullRequests) => updateGitAutomation({ draftPullRequests })}
+      />
+      <GitAutomationTextareaSetting
+        label="Commit message instructions"
+        description="Additional style guidance appended to T3 Code's generated commit prompt."
+        value={gitAutomation.commitStyleInstructions}
+        defaultValue={defaults.commitStyleInstructions}
+        placeholder="Example: Use CP-123 prefixes when present and keep the subject sentence case."
+        onValueChange={(commitStyleInstructions) =>
+          updateGitAutomation({ commitStyleInstructions })
+        }
+      />
+      <GitAutomationTextareaSetting
+        label="Pull request title instructions"
+        description="Additional title guidance appended to T3 Code's generated pull request prompt."
+        value={gitAutomation.pullRequestTitleInstructions}
+        defaultValue={defaults.pullRequestTitleInstructions}
+        placeholder="Example: Start with the user-facing capability, not the implementation detail."
+        onValueChange={(pullRequestTitleInstructions) =>
+          updateGitAutomation({ pullRequestTitleInstructions })
+        }
+      />
+      <GitAutomationTextareaSetting
+        label="Pull request description instructions"
+        description="Additional body guidance appended to T3 Code's generated pull request prompt."
+        value={gitAutomation.pullRequestDescriptionInstructions}
+        defaultValue={defaults.pullRequestDescriptionInstructions}
+        placeholder="Example: Include Summary, Testing, and Rollout sections."
+        onValueChange={(pullRequestDescriptionInstructions) =>
+          updateGitAutomation({ pullRequestDescriptionInstructions })
+        }
+      />
+    </div>
+  );
+}
+
 function SourceControlSectionSkeleton({
   title,
   headerAction,
@@ -565,10 +719,11 @@ export function SourceControlSettingsPanel() {
               {result.versionControlSystems.map((item) => (
                 <DiscoveryItemRow key={`vcs:${item.kind}`} item={item}>
                   {item.kind === "git" ? (
-                    <>
+                    <div className="grid gap-3">
                       <GitFetchIntervalSettings />
                       <PullRequestTargetRemoteSettings />
-                    </>
+                      <GitAutomationSettings />
+                    </div>
                   ) : undefined}
                 </DiscoveryItemRow>
               ))}

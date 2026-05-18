@@ -185,7 +185,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
       {
         output: JSON.stringify({
           subject:
-            "  Add important change to the system with too much detail and a trailing period.\nsecondary line",
+            "  Preserve a repository commit subject style that intentionally exceeds seventy two characters.\nsecondary line",
           body: "\n- added migration\n- updated tests\n",
         }),
         stdinMustNotContain: "branch must be a short semantic git branch fragment",
@@ -200,8 +200,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
             modelSelection: DEFAULT_TEST_MODEL_SELECTION,
           });
 
-          expect(generated.subject.length).toBeLessThanOrEqual(72);
-          expect(generated.subject.endsWith(".")).toBe(false);
+          expect(generated.subject).toBe(
+            "Preserve a repository commit subject style that intentionally exceeds seventy two characters.",
+          );
           expect(generated.body).toBe("- added migration\n- updated tests");
           expect(generated.branch).toBeUndefined();
         }),

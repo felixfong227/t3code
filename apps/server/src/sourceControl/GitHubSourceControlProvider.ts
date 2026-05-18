@@ -255,6 +255,7 @@ export const make = Effect.fn("makeGitHubSourceControlProvider")(function* () {
             ...(repository ? { repository } : {}),
             title: input.title,
             bodyFile: input.bodyFile,
+            ...(input.draft !== undefined ? { draft: input.draft } : {}),
           }),
         ),
         Effect.mapError((error) => providerError("createChangeRequest", error)),

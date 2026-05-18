@@ -179,6 +179,10 @@ export interface GitVcsDriverShape {
     cwd: string,
     baseRef: string,
   ) => Effect.Effect<GitRangeContext, GitCommandError>;
+  readonly readRecentCommitStyle: (
+    cwd: string,
+    limit?: number,
+  ) => Effect.Effect<string, GitCommandError>;
   readonly readConfigValue: (
     cwd: string,
     key: string,

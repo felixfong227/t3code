@@ -16,6 +16,7 @@ import type {
   GitActionProgressEvent,
   GitPreparePullRequestThreadInput,
   ModelSelection,
+  ServerSettings,
   ThreadId,
 } from "@t3tools/contracts";
 
@@ -28,6 +29,7 @@ import {
   GitHubCli,
 } from "../sourceControl/GitHubCli.ts";
 import { type TextGenerationShape, TextGeneration } from "../textGeneration/TextGeneration.ts";
+import type { TextGenerationPolicy } from "../textGeneration/TextGenerationPolicy.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as GitHubSourceControlProvider from "../sourceControl/GitHubSourceControlProvider.ts";
@@ -82,6 +84,7 @@ interface FakeGitTextGeneration {
     stagedPatch: string;
     includeBranch?: boolean;
     modelSelection: ModelSelection;
+    policy?: TextGenerationPolicy | undefined;
   }) => Effect.Effect<
     { subject: string; body: string; branch?: string | undefined },
     TextGenerationError
@@ -94,6 +97,7 @@ interface FakeGitTextGeneration {
     diffSummary: string;
     diffPatch: string;
     modelSelection: ModelSelection;
+    policy?: TextGenerationPolicy | undefined;
   }) => Effect.Effect<{ title: string; body: string }, TextGenerationError>;
   generateBranchName: (input: {
     cwd: string;
@@ -589,6 +593,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             input.title,
             "--body-file",
             input.bodyFile,
+            ...(input.draft ? ["--draft"] : []),
           ],
         }).pipe(Effect.asVoid),
       getDefaultBranch: (input) =>
@@ -678,7 +683,9 @@ function preparePullRequestThread(
 function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
+  settings?: Partial<ServerSettings>;
   setupScriptRunner?: ProjectSetupScriptRunnerShape;
+  vcsDriver?: GitVcsDriver.GitVcsDriverShape;
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
@@ -686,13 +693,15 @@ function makeManager(input?: {
     prefix: "t3-git-manager-test-",
   });
 
-  const serverSettingsLayer = ServerSettingsService.layerTest();
+  const serverSettingsLayer = ServerSettingsService.layerTest(input?.settings ?? {});
 
-  const vcsDriverLayer = GitVcsDriver.layer.pipe(
-    Layer.provideMerge(VcsProcess.layer),
-    Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(ServerConfigLayer),
-  );
+  const vcsDriverLayer = input?.vcsDriver
+    ? Layer.succeed(GitVcsDriver.GitVcsDriver, input.vcsDriver)
+    : GitVcsDriver.layer.pipe(
+        Layer.provideMerge(VcsProcess.layer),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(ServerConfigLayer),
+      );
   const sourceControlRegistryLayer = Layer.effect(
     SourceControlProviderRegistry.SourceControlProviderRegistry,
     GitHubSourceControlProvider.make().pipe(
@@ -1454,6 +1463,219 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("does not read recent commit history when a custom commit message is provided", () =>
+    Effect.gen(function* () {
+      let readRecentCommitStyleCalls = 0;
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        vcsDriver: {
+          statusDetails: () =>
+            Effect.succeed({
+              isRepo: true,
+              hasOriginRemote: false,
+              isDefaultBranch: false,
+              branch: "feature/custom-message",
+              upstreamRef: null,
+              hasWorkingTreeChanges: true,
+              workingTree: {
+                files: [],
+                insertions: 0,
+                deletions: 0,
+              },
+              hasUpstream: false,
+              aheadCount: 0,
+              behindCount: 0,
+              aheadOfDefaultCount: 0,
+            }),
+          prepareCommitContext: () =>
+            Effect.succeed({
+              stagedSummary: "M README.md",
+              stagedPatch: "diff --git a/README.md b/README.md",
+            }),
+          commit: () => Effect.succeed({ commitSha: "1234567890abcdef" }),
+          readRecentCommitStyle: () =>
+            Effect.sync(() => {
+              readRecentCommitStyleCalls += 1;
+              throw new GitCommandError({
+                operation: "log",
+                command: "git log",
+                cwd: "/repo",
+                detail: "should not be called",
+              });
+            }),
+        } as unknown as GitVcsDriver.GitVcsDriverShape,
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: "/repo",
+        action: "commit",
+        commitMessage: "feat: custom summary line",
+      });
+
+      expect(result.commit.status).toBe("created");
+      expect(result.commit.subject).toBe("feat: custom summary line");
+      expect(readRecentCommitStyleCalls).toBe(0);
+    }),
+  );
+
+  it.effect("passes recent commit history and custom commit instructions into generation", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, [
+        "commit",
+        "--allow-empty",
+        "-m",
+        "feat(ui): keep this style",
+        "-m",
+        "with details",
+      ]);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\nstyle\n");
+      let receivedPolicy: TextGenerationPolicy | undefined;
+
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "Use CP ticket prefixes when present.",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              receivedPolicy = input.policy;
+              return { subject: "feat(ui): update style", body: "" };
+            }),
+        },
+      });
+
+      yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+      });
+
+      expect(receivedPolicy?.commitHistory).toContain("feat(ui): keep this style");
+      expect(receivedPolicy?.commitHistory).toContain("with details");
+      expect(receivedPolicy?.commitInstructions).toBe("Use CP ticket prefixes when present.");
+    }),
+  );
+
+  it.effect("continues commit generation when recent commit history cannot be read", () =>
+    Effect.gen(function* () {
+      let receivedPolicy: TextGenerationPolicy | undefined;
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "Use repository style when available.",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              receivedPolicy = input.policy;
+              return { subject: "Update files", body: "" };
+            }),
+        },
+        vcsDriver: {
+          statusDetails: () =>
+            Effect.succeed({
+              isRepo: true,
+              hasOriginRemote: false,
+              isDefaultBranch: false,
+              branch: "feature/history-failure",
+              upstreamRef: null,
+              hasWorkingTreeChanges: true,
+              workingTree: {
+                files: [],
+                insertions: 0,
+                deletions: 0,
+              },
+              hasUpstream: false,
+              aheadCount: 0,
+              behindCount: 0,
+              aheadOfDefaultCount: 0,
+            }),
+          prepareCommitContext: () =>
+            Effect.succeed({
+              stagedSummary: "M README.md",
+              stagedPatch: "diff --git a/README.md b/README.md",
+            }),
+          commit: () => Effect.succeed({ commitSha: "1234567890abcdef" }),
+          readRecentCommitStyle: () =>
+            Effect.fail(
+              new GitCommandError({
+                operation: "log",
+                command: "git log",
+                cwd: "/repo",
+                detail: "log failed",
+              }),
+            ),
+        } as unknown as GitVcsDriver.GitVcsDriverShape,
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: "/repo",
+        action: "commit",
+      });
+
+      expect(result.commit.status).toBe("created");
+      expect(result.commit.subject).toBe("Update files");
+      expect(receivedPolicy?.commitHistory).toBeUndefined();
+      expect(receivedPolicy?.commitInstructions).toBe("Use repository style when available.");
+    }),
+  );
+
+  it.effect("omits recent commit history when disabled", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\nstyle-disabled\n");
+      let receivedPolicy: TextGenerationPolicy | undefined;
+
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: false,
+            draftPullRequests: true,
+            commitStyleInstructions: "",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              receivedPolicy = input.policy;
+              return { subject: "Update style", body: "" };
+            }),
+        },
+      });
+
+      yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+      });
+
+      expect(receivedPolicy?.commitHistory).toBeUndefined();
+      expect(receivedPolicy?.inferRepositoryConventions).toBe(false);
+    }),
+  );
+
   it.effect("commits only selected files when filePaths is provided", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
@@ -1701,6 +1923,55 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       }),
   );
 
+  it.effect("passes PR instructions into generation and creates GitHub draft PRs by default", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-style"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      fs.writeFileSync(path.join(repoDir, "feature.txt"), "feature\n");
+      let receivedPolicy: TextGenerationPolicy | undefined;
+
+      const { manager, ghCalls } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "",
+            pullRequestTitleInstructions: "Use sentence case titles.",
+            pullRequestDescriptionInstructions: "Include rollout notes.",
+          },
+        },
+        ghScenario: {
+          prListSequence: ["[]"],
+        },
+        textGeneration: {
+          generatePrContent: (input) =>
+            Effect.sync(() => {
+              receivedPolicy = input.policy;
+              return {
+                title: "Add PR style settings",
+                body: "## Summary\n- Add settings\n\n## Testing\n- Not run",
+              };
+            }),
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(receivedPolicy?.changeRequestTitleInstructions).toBe("Use sentence case titles.");
+      expect(receivedPolicy?.changeRequestDescriptionInstructions).toBe("Include rollout notes.");
+      expect(ghCalls.some((call) => call.includes("pr create ") && call.includes("--draft"))).toBe(
+        true,
+      );
+    }),
+  );
+
   it.effect("skips push when branch is already up to date", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
@@ -1747,6 +2018,67 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           Effect.map((output) => output.stdout.trim()),
         ),
       ).toBe("origin/feature/push-only");
+    }),
+  );
+
+  it.effect("does not read recent commit history for push-only actions", () =>
+    Effect.gen(function* () {
+      let readRecentCommitStyleCalls = 0;
+      const statusDetails: GitVcsDriver.GitStatusDetails = {
+        isRepo: true,
+        hasOriginRemote: true,
+        isDefaultBranch: false,
+        branch: "feature/push-only",
+        upstreamRef: null,
+        hasWorkingTreeChanges: false,
+        workingTree: {
+          files: [],
+          insertions: 0,
+          deletions: 0,
+        },
+        hasUpstream: false,
+        aheadCount: 1,
+        behindCount: 0,
+        aheadOfDefaultCount: 1,
+      };
+      const { manager } = yield* makeManager({
+        settings: {
+          gitAutomation: {
+            followCommitHistory: true,
+            draftPullRequests: true,
+            commitStyleInstructions: "",
+            pullRequestTitleInstructions: "",
+            pullRequestDescriptionInstructions: "",
+          },
+        },
+        vcsDriver: {
+          statusDetails: () => Effect.succeed(statusDetails),
+          pushCurrentBranch: () =>
+            Effect.succeed({
+              status: "pushed" as const,
+              branch: "feature/push-only",
+              setUpstream: true,
+            }),
+          readRecentCommitStyle: () =>
+            Effect.sync(() => {
+              readRecentCommitStyleCalls += 1;
+              throw new GitCommandError({
+                operation: "log",
+                command: "git log",
+                cwd: "/repo",
+                detail: "should not be called",
+              });
+            }),
+        } as unknown as GitVcsDriver.GitVcsDriverShape,
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: "/repo",
+        action: "push",
+      });
+
+      expect(result.push.status).toBe("pushed");
+      expect(readRecentCommitStyleCalls).toBe(0);
     }),
   );
 

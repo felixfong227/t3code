@@ -124,7 +124,9 @@ function persistClientSettings(settings: ClientSettings): void {
 
 const SERVER_SETTINGS_KEYS = new Set<string>(Struct.keys(ServerSettings.fields));
 
-function splitPatch(patch: Partial<UnifiedSettings>): {
+type UnifiedSettingsPatch = ServerSettingsPatch & ClientSettingsPatch;
+
+function splitPatch(patch: UnifiedSettingsPatch): {
   serverPatch: ServerSettingsPatch;
   clientPatch: ClientSettingsPatch;
 } {
@@ -193,7 +195,7 @@ export function useSettings<T = UnifiedSettings>(selector?: (s: UnifiedSettings)
  * persisted via RPC. Client keys go through client persistence.
  */
 export function useUpdateSettings() {
-  const updateSettings = useCallback((patch: Partial<UnifiedSettings>) => {
+  const updateSettings = useCallback((patch: UnifiedSettingsPatch) => {
     const { serverPatch, clientPatch } = splitPatch(patch);
 
     if (Object.keys(serverPatch).length > 0) {

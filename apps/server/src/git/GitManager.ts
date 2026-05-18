@@ -25,6 +25,7 @@ import {
   GitRunStackedActionInput,
   GitRunStackedActionResult,
   GitStackedAction,
+  type GitAutomationSettings,
   VcsStatusInput,
   type VcsStatusLocalResult,
   type VcsStatusRemoteResult,
@@ -46,6 +47,8 @@ import {
 
 import { GitManagerError } from "@t3tools/contracts";
 import { TextGeneration } from "../textGeneration/TextGeneration.ts";
+import type { TextGenerationPolicy } from "../textGeneration/TextGenerationPolicy.ts";
+import { sanitizeCommitSubject } from "../textGeneration/TextGenerationUtils.ts";
 import { ProjectSetupScriptRunner } from "../project/Services/ProjectSetupScriptRunner.ts";
 import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -418,13 +421,38 @@ function sanitizeCommitMessage(generated: {
   body: string;
   branch?: string | undefined;
 } {
-  const rawSubject = generated.subject.trim().split(/\r?\n/g)[0]?.trim() ?? "";
-  const subject = rawSubject.replace(/[.]+$/g, "").trim();
-  const safeSubject = subject.length > 0 ? subject.slice(0, 72).trimEnd() : "Update project files";
+  const safeSubject = sanitizeCommitSubject(generated.subject);
   return {
     subject: safeSubject,
     body: generated.body.trim(),
     ...(generated.branch !== undefined ? { branch: generated.branch } : {}),
+  };
+}
+
+function optionalPolicyText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function buildGitAutomationPolicy(input: {
+  settings: GitAutomationSettings;
+  commitHistory?: string | undefined;
+}): TextGenerationPolicy {
+  const commitHistory = optionalPolicyText(input.commitHistory);
+  const commitInstructions = optionalPolicyText(input.settings.commitStyleInstructions);
+  const changeRequestTitleInstructions = optionalPolicyText(
+    input.settings.pullRequestTitleInstructions,
+  );
+  const changeRequestDescriptionInstructions = optionalPolicyText(
+    input.settings.pullRequestDescriptionInstructions,
+  );
+  return {
+    kind: "custom",
+    inferRepositoryConventions: input.settings.followCommitHistory,
+    ...(commitHistory ? { commitHistory } : {}),
+    ...(commitInstructions ? { commitInstructions } : {}),
+    ...(changeRequestTitleInstructions ? { changeRequestTitleInstructions } : {}),
+    ...(changeRequestDescriptionInstructions ? { changeRequestDescriptionInstructions } : {}),
   };
 }
 
@@ -1246,6 +1274,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       includeBranch?: boolean;
       filePaths?: readonly string[];
       modelSelection: ModelSelection;
+      policy?: TextGenerationPolicy | undefined;
     }) {
       const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
       if (!context) {
@@ -1272,6 +1301,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
           modelSelection: input.modelSelection,
+          policy: input.policy,
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -1292,6 +1322,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
     filePaths?: readonly string[],
+    policy?: TextGenerationPolicy,
     progressReporter?: GitActionProgressReporter,
     actionId?: string,
   ) {
@@ -1321,6 +1352,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
         modelSelection,
+        policy,
       });
     }
     if (!suggestion) {
@@ -1399,6 +1431,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
 
   const runPrStep = Effect.fn("runPrStep")(function* (
     modelSelection: ModelSelection,
+    gitAutomation: GitAutomationSettings,
     cwd: string,
     fallbackBranch: string | null,
     targetRemotePreference: GitPullRequestTargetRemote | undefined,
@@ -1459,6 +1492,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       diffSummary: limitContext(rangeContext.diffSummary, 20_000),
       diffPatch: limitContext(rangeContext.diffPatch, 60_000),
       modelSelection,
+      policy: buildGitAutomationPolicy({ settings: gitAutomation }),
     });
 
     const bodyFile = path.join(tempDir, `t3code-pr-body-${process.pid}-${randomUUID()}.md`);
@@ -1493,6 +1527,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         title: generated.title,
         bodyFile,
         ...(headContext.targetContext ? { context: headContext.targetContext } : {}),
+        draft: gitAutomation.draftPullRequests,
       })
       .pipe(Effect.ensuring(fileSystem.remove(bodyFile).pipe(Effect.catch(() => Effect.void))));
 
@@ -1731,6 +1766,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
+    policy?: TextGenerationPolicy,
   ) {
     const suggestion = yield* resolveCommitAndBranchSuggestion({
       cwd,
@@ -1739,6 +1775,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       ...(filePaths ? { filePaths } : {}),
       includeBranch: true,
       modelSelection,
+      policy,
     });
     if (!suggestion) {
       return yield* gitManagerError(
@@ -1829,6 +1866,25 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         const pullRequestTargetRemote =
           input.pullRequestTargetRemote ??
           (settingsPrTarget === "ask" ? undefined : settingsPrTarget);
+        const hasCustomCommitMessage = parseCustomCommitMessage(input.commitMessage ?? "") !== null;
+        const needsCommitTextGeneration =
+          (wantsCommit || input.featureBranch) && !hasCustomCommitMessage;
+        const textGenerationPolicy = needsCommitTextGeneration
+          ? buildGitAutomationPolicy({
+              settings: serverSettings.gitAutomation,
+              commitHistory: serverSettings.gitAutomation.followCommitHistory
+                ? yield* gitCore
+                    .readRecentCommitStyle(input.cwd)
+                    .pipe(
+                      Effect.catch((cause) =>
+                        Effect.logWarning(
+                          `GitManager.runStackedAction: failed to read recent commit history for ${input.cwd}; continuing without style examples: ${cause.message}`,
+                        ).pipe(Effect.as("")),
+                      ),
+                    )
+                : "",
+            })
+          : undefined;
 
         if (input.featureBranch) {
           yield* Ref.set(currentPhase, Option.some("branch"));
@@ -1843,6 +1899,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
             initialStatus.branch,
             input.commitMessage,
             input.filePaths,
+            textGenerationPolicy,
           );
           branchStep = result.branchStep;
           commitMessageForStep = result.resolvedCommitMessage;
@@ -1871,6 +1928,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
                   commitMessageForStep,
                   preResolvedCommitSuggestion,
                   input.filePaths,
+                  textGenerationPolicy,
                   options?.progressReporter,
                   progress.actionId,
                 ),
@@ -1903,6 +1961,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
                 Effect.flatMap(() =>
                   runPrStep(
                     modelSelection,
+                    serverSettings.gitAutomation,
                     input.cwd,
                     currentBranch,
                     pullRequestTargetRemote,

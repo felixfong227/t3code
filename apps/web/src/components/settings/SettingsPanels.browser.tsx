@@ -13,6 +13,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerConfig,
+  type ServerSettingsPatch,
   type ServerProcessResourceHistoryResult,
   type ServerProvider,
   type SourceControlDiscoveryResult,
@@ -1230,6 +1231,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
   beforeEach(async () => {
     resetAppAtomRegistryForTests();
     await __resetLocalApiForTests();
+    setServerConfigSnapshot(createBaseServerConfig());
     document.body.innerHTML = "";
   });
 
@@ -1251,8 +1253,23 @@ describe("SourceControlSettingsPanel discovery states", () => {
     window.nativeApi = {
       server: {
         discoverSourceControl,
+        updateSettings: async (patch: ServerSettingsPatch) => {
+          const current = createBaseServerConfig();
+          return {
+            ...current.settings,
+            ...patch,
+            gitAutomation: {
+              ...current.settings.gitAutomation,
+              ...patch.gitAutomation,
+            },
+          };
+        },
       },
-    } as LocalApi;
+      persistence: {
+        getClientSettings: async () => null,
+        setClientSettings: async () => undefined,
+      },
+    } as unknown as LocalApi;
   }
 
   it("shows skeleton sections while the first source control scan is pending", async () => {
@@ -1357,6 +1374,132 @@ describe("SourceControlSettingsPanel discovery states", () => {
     await expect
       .element(page.getByText("Automatic Git fetches run every 30 seconds"))
       .not.toBeInTheDocument();
+  });
+
+  it("shows Git automation settings and persists edits", async () => {
+    const updateSettings = vi.fn(async (patch) => {
+      const current = createBaseServerConfig();
+      return {
+        ...current.settings,
+        ...patch,
+        gitAutomation: {
+          ...current.settings.gitAutomation,
+          ...patch.gitAutomation,
+        },
+      };
+    });
+    window.nativeApi = {
+      server: {
+        discoverSourceControl: async () => ({
+          versionControlSystems: [
+            {
+              kind: "git",
+              label: "Git",
+              executable: "git",
+              implemented: true,
+              status: "available",
+              version: Option.some("git version 2.50.0"),
+              installHint: "Install Git.",
+              detail: Option.none(),
+            },
+          ],
+          sourceControlProviders: [],
+        }),
+        updateSettings,
+      },
+      persistence: {
+        getClientSettings: async () => null,
+        setClientSettings: async () => undefined,
+      },
+    } as unknown as LocalApi;
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <SourceControlSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Toggle Git details" }).click();
+
+    const followHistory = page.getByRole("switch", { name: "Follow previous commit history" });
+    await expect.element(followHistory).toBeChecked();
+    await expect
+      .element(page.getByRole("switch", { name: "Create pull requests as draft" }))
+      .toBeChecked();
+
+    await followHistory.click();
+    expect(updateSettings).toHaveBeenCalledWith({
+      gitAutomation: { followCommitHistory: false },
+    });
+    updateSettings.mockClear();
+
+    const commitInstructions = page.getByPlaceholder("Example: Use CP-123 prefixes");
+    await commitInstructions.fill("Use CP ticket prefixes when present.");
+    await expect.element(commitInstructions).toHaveValue("Use CP ticket prefixes when present.");
+    expect(updateSettings).not.toHaveBeenCalled();
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    expect(updateSettings).toHaveBeenCalledWith({
+      gitAutomation: { commitStyleInstructions: "Use CP ticket prefixes when present." },
+    });
+  });
+
+  it("keeps trailing spaces while editing Git automation textareas", async () => {
+    const updateSettings = vi.fn(async (patch: ServerSettingsPatch) => {
+      const current = createBaseServerConfig();
+      return {
+        ...current.settings,
+        ...patch,
+        gitAutomation: {
+          ...current.settings.gitAutomation,
+          ...patch.gitAutomation,
+        },
+      };
+    });
+    window.nativeApi = {
+      server: {
+        discoverSourceControl: async () => ({
+          versionControlSystems: [
+            {
+              kind: "git",
+              label: "Git",
+              executable: "git",
+              implemented: true,
+              status: "available",
+              version: Option.some("git version 2.50.0"),
+              installHint: "Install Git.",
+              detail: Option.none(),
+            },
+          ],
+          sourceControlProviders: [],
+        }),
+        updateSettings,
+      },
+      persistence: {
+        getClientSettings: async () => null,
+        setClientSettings: async () => undefined,
+      },
+    } as unknown as LocalApi;
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <SourceControlSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Toggle Git details" }).click();
+    const titleInstructions = page.getByPlaceholder("Example: Start with the user-facing");
+
+    await titleInstructions.fill("Use conventional style ");
+
+    await expect.element(titleInstructions).toHaveValue("Use conventional style ");
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    expect(updateSettings).toHaveBeenCalledWith({
+      gitAutomation: { pullRequestTitleInstructions: "Use conventional style " },
+    });
   });
 
   it("does not rescan on remount while the discovery atom is fresh", async () => {

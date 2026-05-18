@@ -49,6 +49,32 @@ describe("buildCommitMessagePrompt", () => {
 
     expect(result.prompt).toContain("Branch: (detached)");
   });
+
+  it("includes recent commit examples and custom commit instructions", () => {
+    const result = buildCommitMessagePrompt({
+      branch: "feature/style",
+      stagedSummary: "M src/app.ts",
+      stagedPatch: "diff",
+      includeBranch: false,
+      policy: {
+        kind: "custom",
+        commitHistory: "feat(ui): add compact toolbar\n\nfix(api): preserve retry state",
+        commitInstructions: "Use CP ticket prefixes when present.",
+        inferRepositoryConventions: true,
+      },
+    });
+
+    expect(result.prompt).toContain("Recent commit examples:");
+    expect(result.prompt).toContain("feat(ui): add compact toolbar");
+    expect(result.prompt).toContain(
+      "Commit message instructions below; they override recent examples when they conflict",
+    );
+    expect(result.prompt).toContain("Commit message instructions:");
+    expect(result.prompt).toContain("Use CP ticket prefixes when present.");
+    expect(result.prompt.indexOf("Recent commit examples:")).toBeLessThan(
+      result.prompt.indexOf("Commit message instructions:"),
+    );
+  });
 });
 
 describe("buildPrContentPrompt", () => {
@@ -69,6 +95,27 @@ describe("buildPrContentPrompt", () => {
     expect(result.prompt).toContain("3 files changed");
     expect(result.prompt).toContain("Diff patch:");
     expect(result.prompt).toContain("export function login()");
+  });
+
+  it("includes separate pull request title and description instructions", () => {
+    const result = buildPrContentPrompt({
+      baseBranch: "main",
+      headBranch: "feature/auth",
+      commitSummary: "feat: add login page",
+      diffSummary: "3 files changed",
+      diffPatch: "diff",
+      policy: {
+        kind: "custom",
+        changeRequestTitleInstructions: "Use sentence case titles.",
+        changeRequestDescriptionInstructions: "Include rollout and rollback sections.",
+        inferRepositoryConventions: false,
+      },
+    });
+
+    expect(result.prompt).toContain("Pull request title instructions:");
+    expect(result.prompt).toContain("Use sentence case titles.");
+    expect(result.prompt).toContain("Pull request description instructions:");
+    expect(result.prompt).toContain("Include rollout and rollback sections.");
   });
 });
 
