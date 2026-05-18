@@ -212,7 +212,10 @@ export function toOpenCodeFileParts(input: {
 }
 
 export function buildOpenCodePermissionRules(runtimeMode: RuntimeMode): PermissionRuleset {
-  if (runtimeMode === "full-access") {
+  const effectiveRuntimeMode =
+    runtimeMode === "codex-auto-review" ? "auto-accept-edits" : runtimeMode;
+
+  if (effectiveRuntimeMode === "full-access") {
     return [{ permission: "*", pattern: "*", action: "allow" }];
   }
 

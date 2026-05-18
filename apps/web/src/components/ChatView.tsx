@@ -2636,6 +2636,7 @@ export default function ChatView(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      runtimeMode: ctxRuntimeMode,
     } = sendCtx;
     const promptForSend = promptRef.current;
     const {
@@ -2830,7 +2831,7 @@ export default function ChatView(props: ChatViewProps) {
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
           ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
-          runtimeMode,
+          runtimeMode: ctxRuntimeMode,
           interactionMode,
         });
       }
@@ -2845,7 +2846,7 @@ export default function ChatView(props: ChatViewProps) {
                       projectId: activeProject.id,
                       title,
                       modelSelection: threadCreateModelSelection,
-                      runtimeMode,
+                      runtimeMode: ctxRuntimeMode,
                       interactionMode,
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
@@ -2878,7 +2879,7 @@ export default function ChatView(props: ChatViewProps) {
         },
         modelSelection: ctxSelectedModelSelection,
         titleSeed: title,
-        runtimeMode,
+        runtimeMode: ctxRuntimeMode,
         interactionMode,
         ...(bootstrap ? { bootstrap } : {}),
         createdAt: messageCreatedAt,
@@ -3138,6 +3139,7 @@ export default function ChatView(props: ChatViewProps) {
         selectedProviderModels: ctxSelectedProviderModels,
         selectedPromptEffort: ctxSelectedPromptEffort,
         selectedModelSelection: ctxSelectedModelSelection,
+        runtimeMode: ctxRuntimeMode,
       } = sendCtx;
 
       const threadIdForSend = activeThread.id;
@@ -3177,7 +3179,7 @@ export default function ChatView(props: ChatViewProps) {
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
           modelSelection: ctxSelectedModelSelection,
-          runtimeMode,
+          runtimeMode: ctxRuntimeMode,
           interactionMode: nextInteractionMode,
         });
 
@@ -3200,7 +3202,7 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: activeThread.title,
-          runtimeMode,
+          runtimeMode: ctxRuntimeMode,
           interactionMode: nextInteractionMode,
           ...(nextInteractionMode === "default" && activeProposedPlan
             ? {
@@ -3241,7 +3243,6 @@ export default function ChatView(props: ChatViewProps) {
       isServerThread,
       persistThreadSettingsForNextTurn,
       resetLocalDispatch,
-      runtimeMode,
       setComposerDraftInteractionMode,
       setThreadError,
       autoOpenPlanSidebar,
@@ -3275,6 +3276,7 @@ export default function ChatView(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      runtimeMode: ctxRuntimeMode,
     } = sendCtx;
 
     const createdAt = new Date().toISOString();
@@ -3306,7 +3308,7 @@ export default function ChatView(props: ChatViewProps) {
         projectId: activeProject.id,
         title: nextThreadTitle,
         modelSelection: nextThreadModelSelection,
-        runtimeMode,
+        runtimeMode: ctxRuntimeMode,
         interactionMode: "default",
         branch: activeThreadBranch,
         worktreePath: activeThread.worktreePath,
@@ -3325,7 +3327,7 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: nextThreadTitle,
-          runtimeMode,
+          runtimeMode: ctxRuntimeMode,
           interactionMode: "default",
           sourceProposedPlan: {
             threadId: activeThread.id,
@@ -3380,7 +3382,6 @@ export default function ChatView(props: ChatViewProps) {
     isServerThread,
     navigate,
     resetLocalDispatch,
-    runtimeMode,
     autoOpenPlanSidebar,
     environmentId,
   ]);

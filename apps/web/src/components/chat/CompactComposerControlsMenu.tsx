@@ -11,6 +11,7 @@ import {
   MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
+import { runtimeModeConfig } from "./runtimeModePresentation";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   activePlan: boolean;
@@ -72,13 +73,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         >
           {props.runtimeModeOptions.map((mode) => (
             <MenuRadioItem key={mode} value={mode}>
-              {mode === "approval-required"
-                ? "Supervised"
-                : mode === "codex-auto-review"
-                  ? "Auto-review"
-                  : mode === "auto-accept-edits"
-                    ? "Auto-accept edits"
-                    : "Full access"}
+              {runtimeModeConfig[mode].label}
             </MenuRadioItem>
           ))}
         </MenuRadioGroup>

@@ -9,6 +9,7 @@ import {
   ProviderSession,
   ProviderDriverKind,
   ProviderInstanceId,
+  RuntimeMode,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import {
@@ -63,6 +64,12 @@ const asProjectId = (value: string): ProjectId => ProjectId.make(value);
 const asApprovalRequestId = (value: string): ApprovalRequestId => ApprovalRequestId.make(value);
 const asMessageId = (value: string): MessageId => MessageId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
+const runtimeModes = new Set<RuntimeMode>([
+  "approval-required",
+  "codex-auto-review",
+  "auto-accept-edits",
+  "full-access",
+]);
 
 const deriveServerPathsSync = (baseDir: string, devUrl: URL | undefined) =>
   Effect.runSync(deriveServerPaths(baseDir, devUrl).pipe(Effect.provide(NodeServices.layer)));
@@ -183,16 +190,17 @@ describe("ProviderCommandReactor", () => {
         typeof input.provider === "string"
           ? (input.provider as ProviderSession["provider"])
           : ProviderDriverKind.make(inputModelSelection?.instanceId ?? modelSelection.instanceId);
+      const inputRuntimeMode =
+        typeof input === "object" && input !== null && "runtimeMode" in input
+          ? input.runtimeMode
+          : undefined;
       const session: ProviderSession = {
         provider,
         ...(providerInstanceId ? { providerInstanceId } : {}),
         status: "ready" as const,
         runtimeMode:
-          typeof input === "object" &&
-          input !== null &&
-          "runtimeMode" in input &&
-          (input.runtimeMode === "approval-required" || input.runtimeMode === "full-access")
-            ? input.runtimeMode
+          typeof inputRuntimeMode === "string" && runtimeModes.has(inputRuntimeMode as RuntimeMode)
+            ? (inputRuntimeMode as RuntimeMode)
             : "full-access",
         ...(typeof input === "object" &&
         input !== null &&
@@ -452,6 +460,47 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
   });
+
+  it.each(["auto-accept-edits", "codex-auto-review"] as const)(
+    "preserves %s runtime mode in mock provider sessions",
+    async (mode) => {
+      const harness = await createHarness();
+      const now = "2026-01-01T00:00:00.000Z";
+
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.runtime-mode.set",
+          commandId: CommandId.make(`cmd-runtime-mode-set-${mode}`),
+          threadId: ThreadId.make("thread-1"),
+          runtimeMode: mode,
+          createdAt: now,
+        }),
+      );
+
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make(`cmd-turn-start-${mode}`),
+          threadId: ThreadId.make("thread-1"),
+          message: {
+            messageId: asMessageId(`user-message-${mode}`),
+            role: "user",
+            text: "hello reactor",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: mode,
+          createdAt: now,
+        }),
+      );
+
+      await waitFor(() => harness.startSession.mock.calls.length === 1);
+      expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+        runtimeMode: mode,
+      });
+      expect(harness.runtimeSessions[0]?.runtimeMode).toBe(mode);
+    },
+  );
 
   it("generates a thread title on the first turn", async () => {
     const harness = await createHarness();

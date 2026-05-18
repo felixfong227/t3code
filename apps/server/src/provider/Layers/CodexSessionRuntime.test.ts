@@ -284,6 +284,48 @@ describe("openCodexThread", () => {
     ]);
   });
 
+  it("passes Codex auto-review reviewer on thread resume", async () => {
+    const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];
+    const client = {
+      request: <M extends "thread/start" | "thread/resume">(
+        method: M,
+        payload: CodexRpc.ClientRequestParamsByMethod[M],
+      ) => {
+        calls.push({ method, payload });
+        return Effect.succeed(
+          makeThreadOpenResponse("resumed-auto-review-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
+        );
+      },
+    };
+
+    const opened = await Effect.runPromise(
+      openCodexThread({
+        client,
+        threadId: ThreadId.make("thread-1"),
+        runtimeMode: "codex-auto-review",
+        cwd: "/tmp/project",
+        requestedModel: "gpt-5.3-codex",
+        serviceTier: undefined,
+        resumeThreadId: "codex-thread-1",
+      }),
+    );
+
+    assert.equal(opened.thread.id, "resumed-auto-review-thread");
+    assert.deepStrictEqual(calls, [
+      {
+        method: "thread/resume",
+        payload: {
+          threadId: "codex-thread-1",
+          cwd: "/tmp/project",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
+          sandbox: "workspace-write",
+          model: "gpt-5.3-codex",
+        },
+      },
+    ]);
+  });
+
   it("falls back to thread/start when resume fails recoverably", async () => {
     const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];
     const started = makeThreadOpenResponse("fresh-thread");

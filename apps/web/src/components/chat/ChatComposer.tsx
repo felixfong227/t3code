@@ -92,11 +92,6 @@ import {
   BotIcon,
   CircleAlertIcon,
   ListTodoIcon,
-  type LucideIcon,
-  LockIcon,
-  LockOpenIcon,
-  PenLineIcon,
-  ShieldCheckIcon,
   XIcon,
 } from "lucide-react";
 import { proposedPlanTitle } from "../../proposedPlan";
@@ -116,40 +111,10 @@ import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { runtimeModeConfig, runtimeModeOptionsForProvider } from "./runtimeModePresentation";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
-const runtimeModeConfig: Record<
-  RuntimeMode,
-  { label: string; description: string; icon: LucideIcon }
-> = {
-  "approval-required": {
-    label: "Supervised",
-    description: "Ask before commands and file changes.",
-    icon: LockIcon,
-  },
-  "codex-auto-review": {
-    label: "Auto-review",
-    description: "Let Codex review approvals automatically and ask only when needed.",
-    icon: ShieldCheckIcon,
-  },
-  "auto-accept-edits": {
-    label: "Auto-accept edits",
-    description: "Auto-approve edits, ask before other actions.",
-    icon: PenLineIcon,
-  },
-  "full-access": {
-    label: "Full access",
-    description: "Allow commands and edits without prompts.",
-    icon: LockOpenIcon,
-  },
-};
-
-const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
-const runtimeModeOptionsForProvider = (provider: ProviderDriverKind): RuntimeMode[] =>
-  provider === "codex"
-    ? runtimeModeOptions
-    : runtimeModeOptions.filter((mode) => mode !== "codex-auto-review");
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const COMPOSER_FLOATING_LAYER_SELECTOR = [
@@ -403,6 +368,7 @@ export interface ChatComposerHandle {
     selectedProvider: ProviderDriverKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
+    runtimeMode: RuntimeMode;
   };
 }
 
@@ -2010,6 +1976,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         selectedProvider,
         selectedModel,
         selectedProviderModels,
+        runtimeMode: effectiveRuntimeMode,
       }),
     }),
     [
@@ -2031,6 +1998,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       selectedPromptEffort,
       selectedProvider,
       selectedProviderModels,
+      effectiveRuntimeMode,
     ],
   );
 
