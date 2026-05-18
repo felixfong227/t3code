@@ -2558,6 +2558,26 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
               ]),
             ],
           },
+          prListByHeadSelector: {
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            "felix/integrate-pr-2305-1003": JSON.stringify([
+              {
+                number: 2306,
+                title: "Add origin-target PR",
+                url: "https://github.com/felixfong227/t3code/pull/2306",
+                baseRefName: "main",
+                headRefName: "felix/integrate-pr-2305-1003",
+                state: "OPEN",
+                isCrossRepository: false,
+                headRepository: {
+                  nameWithOwner: "felixfong227/t3code",
+                },
+                headRepositoryOwner: {
+                  login: "felixfong227",
+                },
+              },
+            ]),
+          },
         },
       });
 
@@ -2577,6 +2597,18 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       expect(ghCalls.join("\n")).toContain(
         "pr list --repo felixfong227/t3code --head felix/integrate-pr-2305-1003",
       );
+
+      fs.writeFileSync(path.join(repoDir, "origin-target-follow-up.txt"), "follow-up\n");
+      const pushResult = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push",
+      });
+
+      expect(pushResult.toast.cta).toEqual({
+        kind: "open_pr",
+        label: "View PR",
+        url: "https://github.com/felixfong227/t3code/pull/2306",
+      });
     }),
   );
 

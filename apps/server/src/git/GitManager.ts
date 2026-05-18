@@ -1149,13 +1149,18 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       finalBranchContext?.hasUpstream === true;
 
     if (shouldLookupExistingOpenPr && finalBranchContext) {
-      latestOpenPr = yield* resolveBranchHeadContext(cwd, {
+      const headContexts = yield* resolveBranchHeadContextsForPrLookup(cwd, {
         branch: finalBranchContext.branch,
         upstreamRef: finalBranchContext.upstreamRef,
-      }).pipe(
-        Effect.flatMap((headContext) => findOpenPr(cwd, headContext)),
-        Effect.catch(() => Effect.succeed(null)),
-      );
+      });
+      for (const headContext of headContexts) {
+        latestOpenPr = yield* findOpenPr(cwd, headContext).pipe(
+          Effect.catch(() => Effect.succeed(null)),
+        );
+        if (latestOpenPr) {
+          break;
+        }
+      }
     }
 
     const openPr = latestOpenPr ?? explicitResultPr;
