@@ -138,4 +138,29 @@ describe("ChatMarkdown", () => {
       await screen.unmount();
     }
   });
+
+  it("renders mermaid code fences as diagrams", async () => {
+    const screen = await render(
+      <ChatMarkdown
+        text={`\`\`\`mermaid
+graph TD
+  Start[Start] --> Done[Done]
+\`\`\``}
+        cwd="/repo/project"
+      />,
+    );
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(document.querySelector(".chat-markdown-mermaid svg")).not.toBeNull();
+        },
+        { timeout: 8000 },
+      );
+      expect(document.querySelector(".chat-markdown-mermaid")?.textContent).toContain("Start");
+      expect(document.querySelector(".chat-markdown-mermaid")?.textContent).toContain("Done");
+    } finally {
+      await screen.unmount();
+    }
+  });
 });
