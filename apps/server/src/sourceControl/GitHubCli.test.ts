@@ -186,6 +186,40 @@ describe("GitHubCli.layer", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("passes an explicit repository to pr list when provided", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput("[]")));
+
+      const gh = yield* GitHubCli.GitHubCli;
+      yield* gh.listOpenPullRequests({
+        cwd: "/repo",
+        repository: "felixfong227/t3code",
+        headSelector: "feature/pr-list",
+      });
+
+      expect(mockRun).toHaveBeenCalledWith({
+        operation: "GitHubCli.execute",
+        command: "gh",
+        args: [
+          "pr",
+          "list",
+          "--repo",
+          "felixfong227/t3code",
+          "--head",
+          "feature/pr-list",
+          "--state",
+          "open",
+          "--limit",
+          "1",
+          "--json",
+          "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
+        ],
+        cwd: "/repo",
+        timeoutMs: 30_000,
+      });
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("reads repository clone URLs", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(

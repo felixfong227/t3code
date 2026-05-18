@@ -53,8 +53,8 @@ export interface GitHubCliShape {
 
   readonly listOpenPullRequests: (input: {
     readonly cwd: string;
-    readonly headSelector: string;
     readonly repository?: string;
+    readonly headSelector: string;
     readonly limit?: number;
   }) => Effect.Effect<ReadonlyArray<GitHubPullRequestSummary>, GitHubCliError>;
 

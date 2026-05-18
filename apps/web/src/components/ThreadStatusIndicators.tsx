@@ -18,9 +18,11 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export interface PrStatusIndicator {
   label: string;
+  numberLabel: string;
   colorClass: string;
   tooltip: string;
   url: string;
+  searchTerms: readonly string[];
 }
 
 export interface TerminalStatusIndicator {
@@ -31,35 +33,62 @@ export interface TerminalStatusIndicator {
 
 export type ThreadPr = VcsStatusResult["pr"];
 
+function changeRequestSearchTerms(input: {
+  number: number;
+  shortName: string;
+  title: string;
+}): string[] {
+  const number = String(input.number);
+  return [
+    number,
+    `#${number}`,
+    `${input.shortName} ${number}`,
+    `${input.shortName} #${number}`,
+    input.title,
+  ];
+}
+
 export function prStatusIndicator(
   pr: ThreadPr,
   provider: VcsStatusResult["sourceControlProvider"] | null | undefined,
 ): PrStatusIndicator | null {
   if (!pr) return null;
   const presentation = resolveChangeRequestPresentation(provider);
+  const numberLabel = `#${pr.number}`;
+  const searchTerms = changeRequestSearchTerms({
+    number: pr.number,
+    shortName: presentation.shortName,
+    title: pr.title,
+  });
 
   if (pr.state === "open") {
     return {
       label: `${presentation.shortName} open`,
+      numberLabel,
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
-      tooltip: `#${pr.number} ${presentation.shortName} open: ${pr.title}`,
+      tooltip: `${numberLabel} ${presentation.shortName} open: ${pr.title}`,
       url: pr.url,
+      searchTerms,
     };
   }
   if (pr.state === "closed") {
     return {
       label: `${presentation.shortName} closed`,
+      numberLabel,
       colorClass: "text-zinc-500 dark:text-zinc-400/80",
-      tooltip: `#${pr.number} ${presentation.shortName} closed: ${pr.title}`,
+      tooltip: `${numberLabel} ${presentation.shortName} closed: ${pr.title}`,
       url: pr.url,
+      searchTerms,
     };
   }
   if (pr.state === "merged") {
     return {
       label: `${presentation.shortName} merged`,
+      numberLabel,
       colorClass: "text-violet-600 dark:text-violet-300/90",
-      tooltip: `#${pr.number} ${presentation.shortName} merged: ${pr.title}`,
+      tooltip: `${numberLabel} ${presentation.shortName} merged: ${pr.title}`,
       url: pr.url,
+      searchTerms,
     };
   }
   return null;
@@ -175,11 +204,12 @@ export function ThreadRowLeadingStatus({ thread }: { thread: SidebarThreadSummar
             render={
               <span
                 aria-label={prStatus.tooltip}
-                className={`inline-flex items-center justify-center ${prStatus.colorClass}`}
+                className={`inline-flex items-center justify-center gap-0.5 text-sm font-medium ${prStatus.colorClass}`}
               />
             }
           >
             <ChangeRequestStatusIcon className="size-3" />
+            <span>{prStatus.numberLabel}</span>
           </TooltipTrigger>
           <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
         </Tooltip>
