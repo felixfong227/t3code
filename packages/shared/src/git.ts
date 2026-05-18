@@ -120,9 +120,9 @@ export function normalizeGitRemoteUrl(value: string): string {
     }
   }
 
-  const scpStyleHostAndPath = /^git@([^:/\s]+)[:/]([^/\s]+(?:\/[^/\s]+)+)$/i.exec(normalized);
-  if (scpStyleHostAndPath?.[1] && scpStyleHostAndPath[2]) {
-    return `${scpStyleHostAndPath[1]}/${scpStyleHostAndPath[2]}`;
+  const scpStyleRemote = parseScpStyleGitRemote(normalized);
+  if (scpStyleRemote) {
+    return `${scpStyleRemote.host}/${scpStyleRemote.repositoryPath}`;
   }
 
   return normalized;
@@ -153,6 +153,39 @@ function normalizeRepositoryPath(path: string): string | null {
   return repositoryPath.includes("/") ? repositoryPath : null;
 }
 
+function parseScpStyleGitRemote(value: string): { host: string; repositoryPath: string } | null {
+  if (value.includes("://")) {
+    return null;
+  }
+
+  const userSeparatorIndex = value.indexOf("@");
+  if (userSeparatorIndex <= 0) {
+    return null;
+  }
+
+  const hostStartIndex = userSeparatorIndex + 1;
+  const colonSeparatorIndex = value.indexOf(":", hostStartIndex);
+  const slashSeparatorIndex = value.indexOf("/", hostStartIndex);
+  const separatorIndex =
+    colonSeparatorIndex === -1
+      ? slashSeparatorIndex
+      : slashSeparatorIndex === -1
+        ? colonSeparatorIndex
+        : Math.min(colonSeparatorIndex, slashSeparatorIndex);
+
+  if (separatorIndex <= hostStartIndex) {
+    return null;
+  }
+
+  const host = value.slice(hostStartIndex, separatorIndex).trim();
+  const repositoryPath = normalizeRepositoryPath(value.slice(separatorIndex + 1));
+  if (!host || !repositoryPath || /\s/.test(host)) {
+    return null;
+  }
+
+  return { host, repositoryPath };
+}
+
 /**
  * Best-effort parse of a hosted repository path from common git remote URL shapes.
  * GitHub paths are usually `owner/repo`; GitLab paths may include nested groups.
@@ -171,8 +204,7 @@ export function parseRepositoryPathFromRemoteUrl(url: string | null): string | n
     }
   }
 
-  const scpStyleHostAndPath = /^[^@\s]+@[^:/\s]+[:/]([^\s]+)$/i.exec(trimmed);
-  return normalizeRepositoryPath(scpStyleHostAndPath?.[1] ?? "");
+  return parseScpStyleGitRemote(trimmed)?.repositoryPath ?? null;
 }
 
 function deriveLocalBranchNameCandidatesFromRemoteRef(
