@@ -405,6 +405,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.autoOpenPlanSidebar !== DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar
         ? ["Auto-open task panel"]
         : []),
+      ...(settings.autoCollapseSessionSidebarForNarrowChat !==
+      DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat
+        ? ["Auto-collapse session sidebar"]
+        : []),
       ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
         ? ["Assistant output"]
         : []),
@@ -432,6 +436,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ],
     [
       isGitWritingModelDirty,
+      settings.autoCollapseSessionSidebarForNarrowChat,
       settings.autoOpenPlanSidebar,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
@@ -464,6 +469,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
+      autoCollapseSessionSidebarForNarrowChat:
+        DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat,
       autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
       enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
@@ -697,6 +704,36 @@ export function GeneralSettingsPanel() {
                 updateSettings({ autoOpenPlanSidebar: Boolean(checked) })
               }
               aria-label="Open the task panel automatically"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Auto-collapse session sidebar"
+          description="Collapse the session sidebar when the chat panel becomes too narrow."
+          resetAction={
+            settings.autoCollapseSessionSidebarForNarrowChat !==
+            DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat ? (
+              <SettingResetButton
+                label="auto-collapse session sidebar"
+                onClick={() =>
+                  updateSettings({
+                    autoCollapseSessionSidebarForNarrowChat:
+                      DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.autoCollapseSessionSidebarForNarrowChat}
+              onCheckedChange={(checked) =>
+                updateSettings({
+                  autoCollapseSessionSidebarForNarrowChat: Boolean(checked),
+                })
+              }
+              aria-label="Collapse the session sidebar when chat is narrow"
             />
           }
         />

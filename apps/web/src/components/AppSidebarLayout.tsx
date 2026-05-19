@@ -2,20 +2,28 @@ import { useEffect, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import ThreadSidebar from "./Sidebar";
-import { Sidebar, SidebarRail } from "./ui/sidebar";
-import { canCollapseAppSidebar } from "./AppSidebarLayout.logic";
+import { Sidebar, SidebarRail, useSidebar } from "./ui/sidebar";
+import {
+  canCollapseAppSidebar,
+  shouldAutoCollapseAppSidebar,
+  THREAD_MAIN_CONTENT_MIN_WIDTH,
+} from "./AppSidebarLayout.logic";
 import {
   clearShortcutModifierState,
   syncShortcutModifierStateFromKeyboardEvent,
 } from "../shortcutModifierState";
+import { useSettings } from "../hooks/useSettings";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
 const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
-const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
   const sidebarCanCollapse = canCollapseAppSidebar(pathname);
+  const autoCollapseSessionSidebarForNarrowChat = useSettings(
+    (settings) => settings.autoCollapseSessionSidebarForNarrowChat,
+  );
+  const { isMobile, open, setOpen } = useSidebar();
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -55,6 +63,68 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       unsubscribe?.();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (
+      !autoCollapseSessionSidebarForNarrowChat ||
+      !sidebarCanCollapse ||
+      !open ||
+      isMobile ||
+      typeof ResizeObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const chatPanel = document.querySelector<HTMLElement>("[data-chat-main-panel='true']");
+    if (!chatPanel) {
+      return;
+    }
+
+    let animationFrame: number | null = null;
+    const checkWidth = (width: number) => {
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = null;
+        if (
+          shouldAutoCollapseAppSidebar({
+            canCollapse: sidebarCanCollapse,
+            chatPanelWidth: width,
+            enabled: autoCollapseSessionSidebarForNarrowChat,
+            isMobile,
+            open,
+          })
+        ) {
+          void setOpen(false);
+        }
+      });
+    };
+
+    checkWidth(chatPanel.getBoundingClientRect().width);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const width = entry?.contentRect.width ?? chatPanel.getBoundingClientRect().width;
+      checkWidth(width);
+    });
+    resizeObserver.observe(chatPanel);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [
+    autoCollapseSessionSidebarForNarrowChat,
+    isMobile,
+    open,
+    pathname,
+    setOpen,
+    sidebarCanCollapse,
+  ]);
 
   return (
     <>

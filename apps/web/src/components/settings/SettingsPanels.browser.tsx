@@ -762,6 +762,53 @@ describe("GeneralSettingsPanel observability", () => {
       .toBeInTheDocument();
   });
 
+  it("toggles and resets the auto-collapse session sidebar setting", async () => {
+    const setClientSettings = vi.fn().mockResolvedValue(undefined);
+    window.desktopBridge = {
+      ...createDesktopBridgeStub(),
+      setClientSettings,
+    };
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    mounted = await renderWithTestRouter(
+      <AppAtomRegistryProvider>
+        <GeneralSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect.element(page.getByText("Auto-collapse session sidebar")).toBeInTheDocument();
+    const switchControl = page.getByRole("switch", {
+      name: "Collapse the session sidebar when chat is narrow",
+    });
+    await expect.element(switchControl).toBeChecked();
+
+    await switchControl.click();
+
+    await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          autoCollapseSessionSidebarForNarrowChat: false,
+        }),
+      );
+    });
+    await expect
+      .element(page.getByRole("button", { name: "Reset auto-collapse session sidebar to default" }))
+      .toBeInTheDocument();
+
+    await page
+      .getByRole("button", { name: "Reset auto-collapse session sidebar to default" })
+      .click();
+
+    await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          autoCollapseSessionSidebarForNarrowChat: true,
+        }),
+      );
+    });
+    await expect.element(switchControl).toBeChecked();
+  });
+
   it("creates and shows a pairing link when network access is enabled", async () => {
     window.desktopBridge = createDesktopBridgeStub({
       serverExposureState: {
