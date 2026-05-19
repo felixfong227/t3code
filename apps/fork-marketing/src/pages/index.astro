@@ -1,0 +1,178 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const repoUrl = "https://github.com/felixfong227/t3code";
+const releasesUrl = repoUrl + "/releases";
+const upstreamUrl = "https://github.com/pingdotgg/t3code";
+
+const features = [
+  {
+    title: "Diff Context Comments",
+    body: "Draft notes directly against turn diffs so review context stays attached to the code that changed.",
+  },
+  {
+    title: "Mermaid in Chat",
+    body: "Render diagrams in agent responses without leaving the conversation.",
+  },
+  {
+    title: "Fork-Aware PR Targets",
+    body: "Keep pull request and merge request creation pointed at the right fork instead of falling back to upstream.",
+  },
+  {
+    title: "Auto-Review Runtime Mode",
+    body: "Run Codex sessions in an explicit review-oriented mode when the job is to inspect changes.",
+  },
+  {
+    title: "Change Request Numbers",
+    body: "Show request identifiers in thread navigation so branch and review work is easier to track.",
+  },
+  {
+    title: "Collapsible Workspace Sidebar",
+    body: "Collapse the sidebar from the keyboard when the editor needs more room.",
+  },
+];
+---
+
+<Layout>
+  <section class="section hero">
+    <h1>T3 Code Fork</h1>
+    <div class="project-links" aria-label="Project links">
+      <a href={repoUrl} target="_blank" rel="noopener noreferrer">Source</a>
+      <a href={releasesUrl} target="_blank" rel="noopener noreferrer">Releases</a>
+      <a href={upstreamUrl} target="_blank" rel="noopener noreferrer">Upstream T3code</a>
+    </div>
+  </section>
+
+  <section class="section features-section" aria-labelledby="features-heading">
+    <p class="eyebrow">Fork Features</p>
+    <h2 id="features-heading" class="visually-hidden">Fork Features</h2>
+
+    <div class="feature-grid">
+      {
+        features.map((feature) => (
+          <article class="feature-card">
+            <h3>{feature.title}</h3>
+            <p>{feature.body}</p>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="section policy" aria-label="Upstream policy">
+    <p class="eyebrow">Upstream Policy</p>
+    <p class="policy-body">
+      Fork-specific code is temporary by default. If upstream T3 Code ships the
+      same feature, or a similar-enough version that solves the same problem,
+      this fork should use upstream and remove the local implementation.
+    </p>
+  </section>
+</Layout>
+
+<style>
+  .hero {
+    padding-top: 44px;
+    padding-bottom: 24px;
+  }
+
+  .project-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .project-links > * {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .project-links a {
+    text-decoration: underline;
+    text-decoration-color: rgba(182, 176, 168, 0.35);
+    text-underline-offset: 4px;
+  }
+
+  .project-links a:hover {
+    color: var(--text);
+    text-decoration-color: var(--text);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .features-section {
+    padding-top: 24px;
+    padding-bottom: 32px;
+  }
+
+  .feature-card {
+    min-height: 150px;
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+      var(--surface);
+  }
+
+  .feature-card h3 {
+    margin-bottom: 12px;
+    font-size: 17px;
+  }
+
+  .feature-card p {
+    margin-bottom: 0;
+    font-size: 15px;
+  }
+
+  .policy {
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+  }
+
+  .policy-body {
+    margin: 8px 0 0;
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 620px) {
+    .hero {
+      padding-top: 38px;
+      padding-bottom: 22px;
+    }
+
+    .features-section {
+      padding-top: 22px;
+      padding-bottom: 30px;
+    }
+
+    .feature-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .feature-card {
+      min-height: auto;
+    }
+
+    .policy-body {
+      font-size: 15px;
+    }
+  }
+</style>
