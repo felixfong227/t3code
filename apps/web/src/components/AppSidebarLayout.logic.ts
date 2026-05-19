@@ -4,6 +4,10 @@ export function canCollapseAppSidebar(pathname: string): boolean {
   return !pathname.startsWith("/settings");
 }
 
+export function shouldWatchForDelayedChatPanel(pathname: string): boolean {
+  return canCollapseAppSidebar(pathname) && pathname !== "/";
+}
+
 export function shouldAutoCollapseAppSidebar(input: {
   canCollapse: boolean;
   enabled: boolean;

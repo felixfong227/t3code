@@ -7,6 +7,7 @@ import {
   canCollapseAppSidebar,
   shouldAutoCollapseAppSidebar,
   shouldAutoReopenAppSidebar,
+  shouldWatchForDelayedChatPanel,
   THREAD_MAIN_CONTENT_MIN_WIDTH,
 } from "./AppSidebarLayout.logic";
 import {
@@ -158,14 +159,16 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       return true;
     };
 
-    if (!bindChatPanel()) {
+    if (!bindChatPanel() && shouldWatchForDelayedChatPanel(pathname)) {
       mutationObserver = new MutationObserver(() => {
         if (bindChatPanel()) {
           mutationObserver?.disconnect();
           mutationObserver = null;
         }
       });
-      mutationObserver.observe(document.body, { childList: true, subtree: true });
+      const observerRoot =
+        document.querySelector<HTMLElement>("[data-slot='sidebar-wrapper']") ?? document.body;
+      mutationObserver.observe(observerRoot, { childList: true, subtree: true });
     }
 
     return () => {

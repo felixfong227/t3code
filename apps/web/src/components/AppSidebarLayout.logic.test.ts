@@ -4,6 +4,7 @@ import {
   canCollapseAppSidebar,
   shouldAutoCollapseAppSidebar,
   shouldAutoReopenAppSidebar,
+  shouldWatchForDelayedChatPanel,
   THREAD_MAIN_CONTENT_MIN_WIDTH,
 } from "./AppSidebarLayout.logic";
 
@@ -16,6 +17,19 @@ describe("canCollapseAppSidebar", () => {
   it("keeps settings routes expanded", () => {
     expect(canCollapseAppSidebar("/settings")).toBe(false);
     expect(canCollapseAppSidebar("/settings/general")).toBe(false);
+  });
+});
+
+describe("shouldWatchForDelayedChatPanel", () => {
+  it("watches thread-like chat routes where bootstrap can delay the chat panel", () => {
+    expect(shouldWatchForDelayedChatPanel("/environment-local/thread-123")).toBe(true);
+    expect(shouldWatchForDelayedChatPanel("/draft/draft-123")).toBe(true);
+  });
+
+  it("does not watch index or settings routes", () => {
+    expect(shouldWatchForDelayedChatPanel("/")).toBe(false);
+    expect(shouldWatchForDelayedChatPanel("/settings")).toBe(false);
+    expect(shouldWatchForDelayedChatPanel("/settings/general")).toBe(false);
   });
 });
 
