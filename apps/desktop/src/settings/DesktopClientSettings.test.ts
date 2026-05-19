@@ -14,6 +14,7 @@ import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 const clientSettings: ClientSettings = {
   autoCollapseSessionSidebarForNarrowChat: true,
   autoOpenPlanSidebar: false,
+  autoReopenSessionSidebarWhenSpaceAvailable: true,
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],

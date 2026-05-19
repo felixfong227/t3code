@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canCollapseAppSidebar,
   shouldAutoCollapseAppSidebar,
+  shouldAutoReopenAppSidebar,
   THREAD_MAIN_CONTENT_MIN_WIDTH,
 } from "./AppSidebarLayout.logic";
 
@@ -15,6 +16,76 @@ describe("canCollapseAppSidebar", () => {
   it("keeps settings routes expanded", () => {
     expect(canCollapseAppSidebar("/settings")).toBe(false);
     expect(canCollapseAppSidebar("/settings/general")).toBe(false);
+  });
+});
+
+describe("shouldAutoReopenAppSidebar", () => {
+  const autoCollapsedDesktopClosedInput = {
+    canCollapse: true,
+    enabled: true,
+    isMobile: false,
+    open: false,
+    sidebarWidth: 256,
+    wasAutoCollapsed: true,
+  };
+
+  it("reopens when the chat panel would still meet the minimum after restoring the sidebar", () => {
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 256,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not reopen when restoring the sidebar would make chat too narrow", () => {
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 255,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not reopen when disabled or not auto-collapsed", () => {
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        enabled: false,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 256,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        wasAutoCollapsed: false,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 256,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not reopen on mobile, open sidebars, or non-collapsible routes", () => {
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        isMobile: true,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 256,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        open: true,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 256,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoReopenAppSidebar({
+        ...autoCollapsedDesktopClosedInput,
+        canCollapse: false,
+        chatPanelWidth: THREAD_MAIN_CONTENT_MIN_WIDTH + 256,
+      }),
+    ).toBe(false);
   });
 });
 

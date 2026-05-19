@@ -601,6 +601,7 @@ describe("wsApi", () => {
     const clientSettings = {
       autoCollapseSessionSidebarForNarrowChat: true,
       autoOpenPlanSidebar: false,
+      autoReopenSessionSidebarWhenSpaceAvailable: true,
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       dismissedProviderUpdateNotificationKeys: [],
@@ -665,6 +666,7 @@ describe("wsApi", () => {
     const clientSettings = {
       autoCollapseSessionSidebarForNarrowChat: true,
       autoOpenPlanSidebar: false,
+      autoReopenSessionSidebarWhenSpaceAvailable: true,
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       dismissedProviderUpdateNotificationKeys: [],

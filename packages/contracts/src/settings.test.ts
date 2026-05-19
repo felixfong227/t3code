@@ -17,27 +17,40 @@ const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
 
 describe("ClientSettings.autoCollapseSessionSidebarForNarrowChat", () => {
-  it("defaults to enabled for empty or legacy client settings", () => {
+  it("defaults auto-collapse and auto-reopen to enabled for empty or legacy client settings", () => {
     expect(decodeClientSettings({}).autoCollapseSessionSidebarForNarrowChat).toBe(true);
+    expect(decodeClientSettings({}).autoReopenSessionSidebarWhenSpaceAvailable).toBe(true);
     expect(
       decodeClientSettings({
         autoOpenPlanSidebar: false,
       }).autoCollapseSessionSidebarForNarrowChat,
+    ).toBe(true);
+    expect(
+      decodeClientSettings({
+        autoOpenPlanSidebar: false,
+      }).autoReopenSessionSidebarWhenSpaceAvailable,
     ).toBe(true);
   });
 
   it("accepts boolean patches", () => {
     const patch = decodeClientSettingsPatch({
       autoCollapseSessionSidebarForNarrowChat: false,
+      autoReopenSessionSidebarWhenSpaceAvailable: false,
     });
 
     expect(patch.autoCollapseSessionSidebarForNarrowChat).toBe(false);
+    expect(patch.autoReopenSessionSidebarWhenSpaceAvailable).toBe(false);
   });
 
   it("rejects non-boolean patches", () => {
     expect(() =>
       decodeClientSettingsPatch({
         autoCollapseSessionSidebarForNarrowChat: "false",
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeClientSettingsPatch({
+        autoReopenSessionSidebarWhenSpaceAvailable: "false",
       }),
     ).toThrow();
   });

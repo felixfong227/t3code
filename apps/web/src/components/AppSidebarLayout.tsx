@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import ThreadSidebar from "./Sidebar";
@@ -6,6 +6,7 @@ import { Sidebar, SidebarRail, useSidebar } from "./ui/sidebar";
 import {
   canCollapseAppSidebar,
   shouldAutoCollapseAppSidebar,
+  shouldAutoReopenAppSidebar,
   THREAD_MAIN_CONTENT_MIN_WIDTH,
 } from "./AppSidebarLayout.logic";
 import {
@@ -16,6 +17,7 @@ import { useSettings } from "../hooks/useSettings";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
 const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
+const THREAD_SIDEBAR_DEFAULT_WIDTH = 16 * 16;
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -23,7 +25,17 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const autoCollapseSessionSidebarForNarrowChat = useSettings(
     (settings) => settings.autoCollapseSessionSidebarForNarrowChat,
   );
+  const autoReopenSessionSidebarWhenSpaceAvailable = useSettings(
+    (settings) => settings.autoReopenSessionSidebarWhenSpaceAvailable,
+  );
   const { isMobile, open, setOpen } = useSidebar();
+  const autoCollapsedRef = useRef(false);
+
+  useEffect(() => {
+    if (open) {
+      autoCollapsedRef.current = false;
+    }
+  }, [open]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -68,17 +80,20 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     if (
       !autoCollapseSessionSidebarForNarrowChat ||
       !sidebarCanCollapse ||
-      !open ||
       isMobile ||
-      typeof ResizeObserver === "undefined"
+      typeof ResizeObserver === "undefined" ||
+      (!open && (!autoReopenSessionSidebarWhenSpaceAvailable || !autoCollapsedRef.current))
     ) {
       return;
     }
 
-    const chatPanel = document.querySelector<HTMLElement>("[data-chat-main-panel='true']");
-    if (!chatPanel) {
-      return;
-    }
+    const readSidebarWidth = () => {
+      const sidebarContainer = document.querySelector<HTMLElement>(
+        "[data-slot='sidebar'][data-side='left'] [data-slot='sidebar-container']",
+      );
+      const sidebarWidth = sidebarContainer?.getBoundingClientRect().width ?? 0;
+      return sidebarWidth > 0 ? sidebarWidth : THREAD_SIDEBAR_DEFAULT_WIDTH;
+    };
 
     let animationFrame: number | null = null;
     const checkWidth = (width: number) => {
@@ -97,28 +112,72 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             open,
           })
         ) {
+          autoCollapsedRef.current = true;
           void setOpen(false);
+          return;
+        }
+
+        if (
+          shouldAutoReopenAppSidebar({
+            canCollapse: sidebarCanCollapse,
+            chatPanelWidth: width,
+            enabled: autoReopenSessionSidebarWhenSpaceAvailable,
+            isMobile,
+            open,
+            sidebarWidth: readSidebarWidth(),
+            wasAutoCollapsed: autoCollapsedRef.current,
+          })
+        ) {
+          autoCollapsedRef.current = false;
+          void setOpen(true);
         }
       });
     };
 
-    checkWidth(chatPanel.getBoundingClientRect().width);
+    let resizeObserver: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      const width = entry?.contentRect.width ?? chatPanel.getBoundingClientRect().width;
-      checkWidth(width);
-    });
-    resizeObserver.observe(chatPanel);
+    const bindChatPanel = () => {
+      if (resizeObserver) {
+        return true;
+      }
+
+      const chatPanel = document.querySelector<HTMLElement>("[data-chat-main-panel='true']");
+      if (!chatPanel) {
+        return false;
+      }
+
+      checkWidth(chatPanel.getBoundingClientRect().width);
+
+      resizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        const width = entry?.contentRect.width ?? chatPanel.getBoundingClientRect().width;
+        checkWidth(width);
+      });
+      resizeObserver.observe(chatPanel);
+      return true;
+    };
+
+    if (!bindChatPanel()) {
+      mutationObserver = new MutationObserver(() => {
+        if (bindChatPanel()) {
+          mutationObserver?.disconnect();
+          mutationObserver = null;
+        }
+      });
+      mutationObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
     return () => {
-      resizeObserver.disconnect();
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);
       }
     };
   }, [
     autoCollapseSessionSidebarForNarrowChat,
+    autoReopenSessionSidebarWhenSpaceAvailable,
     isMobile,
     open,
     pathname,

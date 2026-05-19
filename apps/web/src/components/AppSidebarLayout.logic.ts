@@ -20,3 +20,24 @@ export function shouldAutoCollapseAppSidebar(input: {
     input.chatPanelWidth < (input.minChatPanelWidth ?? THREAD_MAIN_CONTENT_MIN_WIDTH)
   );
 }
+
+export function shouldAutoReopenAppSidebar(input: {
+  canCollapse: boolean;
+  enabled: boolean;
+  isMobile: boolean;
+  open: boolean;
+  wasAutoCollapsed: boolean;
+  chatPanelWidth: number;
+  sidebarWidth: number;
+  minChatPanelWidth?: number;
+}): boolean {
+  return (
+    input.enabled &&
+    input.canCollapse &&
+    !input.isMobile &&
+    !input.open &&
+    input.wasAutoCollapsed &&
+    input.chatPanelWidth - input.sidebarWidth >=
+      (input.minChatPanelWidth ?? THREAD_MAIN_CONTENT_MIN_WIDTH)
+  );
+}

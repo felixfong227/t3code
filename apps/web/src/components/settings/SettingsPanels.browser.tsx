@@ -762,7 +762,7 @@ describe("GeneralSettingsPanel observability", () => {
       .toBeInTheDocument();
   });
 
-  it("toggles and resets the auto-collapse session sidebar setting", async () => {
+  it("toggles and resets the auto-collapse session sidebar settings", async () => {
     const setClientSettings = vi.fn().mockResolvedValue(undefined);
     window.desktopBridge = {
       ...createDesktopBridgeStub(),
@@ -777,12 +777,43 @@ describe("GeneralSettingsPanel observability", () => {
     );
 
     await expect.element(page.getByText("Auto-collapse session sidebar")).toBeInTheDocument();
-    const switchControl = page.getByRole("switch", {
+    await expect.element(page.getByText("Auto-reopen session sidebar")).toBeInTheDocument();
+    const collapseSwitch = page.getByRole("switch", {
       name: "Collapse the session sidebar when chat is narrow",
     });
-    await expect.element(switchControl).toBeChecked();
+    const reopenSwitch = page.getByRole("switch", {
+      name: "Reopen the session sidebar when space is available",
+    });
+    await expect.element(collapseSwitch).toBeChecked();
+    await expect.element(reopenSwitch).toBeChecked();
 
-    await switchControl.click();
+    await reopenSwitch.click();
+
+    await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          autoReopenSessionSidebarWhenSpaceAvailable: false,
+        }),
+      );
+    });
+    await expect
+      .element(page.getByRole("button", { name: "Reset auto-reopen session sidebar to default" }))
+      .toBeInTheDocument();
+
+    await page
+      .getByRole("button", { name: "Reset auto-reopen session sidebar to default" })
+      .click();
+
+    await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          autoReopenSessionSidebarWhenSpaceAvailable: true,
+        }),
+      );
+    });
+    await expect.element(reopenSwitch).toBeChecked();
+
+    await collapseSwitch.click();
 
     await vi.waitFor(() => {
       expect(setClientSettings).toHaveBeenLastCalledWith(
@@ -806,7 +837,7 @@ describe("GeneralSettingsPanel observability", () => {
         }),
       );
     });
-    await expect.element(switchControl).toBeChecked();
+    await expect.element(collapseSwitch).toBeChecked();
   });
 
   it("creates and shows a pairing link when network access is enabled", async () => {
