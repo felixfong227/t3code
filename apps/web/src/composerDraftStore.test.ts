@@ -1541,6 +1541,32 @@ describe("composerDraftStore runtime and interaction settings", () => {
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe("approval-required");
   });
 
+  it("remembers the last selected runtime mode", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setRuntimeMode(threadRef, "codex-auto-review");
+
+    expect(useComposerDraftStore.getState().stickyRuntimeMode).toBe("codex-auto-review");
+  });
+
+  it("applies sticky runtime mode to new drafts without overriding explicit draft context", () => {
+    const store = useComposerDraftStore.getState();
+    const seedThreadId = ThreadId.make("thread-seed-runtime");
+    const seedThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, seedThreadId);
+    const stickyThreadId = ThreadId.make("thread-sticky-runtime");
+    const stickyThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, stickyThreadId);
+    const explicitThreadId = ThreadId.make("thread-explicit-runtime");
+    const explicitThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, explicitThreadId);
+
+    store.setRuntimeMode(seedThreadRef, "codex-auto-review");
+    store.applyStickyState(stickyThreadRef);
+    store.setRuntimeMode(explicitThreadRef, "full-access");
+    store.applyStickyState(explicitThreadRef);
+
+    expect(draftFor(stickyThreadId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe("codex-auto-review");
+    expect(draftFor(explicitThreadId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe("full-access");
+  });
+
   it("stores interaction mode overrides in the composer draft", () => {
     const store = useComposerDraftStore.getState();
 

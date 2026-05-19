@@ -2,11 +2,35 @@ import { describe, expect, it } from "vitest";
 import * as Schema from "effect/Schema";
 
 import { ProviderInstanceId } from "./providerInstance.ts";
-import { DEFAULT_SERVER_SETTINGS, ServerSettings, ServerSettingsPatch } from "./settings.ts";
+import {
+  ClientSettingsPatch,
+  ClientSettingsSchema,
+  DEFAULT_CLIENT_SETTINGS,
+  DEFAULT_SERVER_SETTINGS,
+  ServerSettings,
+  ServerSettingsPatch,
+} from "./settings.ts";
 
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
+const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
+const decodeClientSettingsPatch = Schema.decodeUnknownSync(ClientSettingsPatch);
+
+describe("ClientSettings.defaultThreadRuntimeMode", () => {
+  it("defaults new thread permissions to follow-last", () => {
+    expect(DEFAULT_CLIENT_SETTINGS.defaultThreadRuntimeMode).toBe("follow-last");
+    expect(decodeClientSettings({}).defaultThreadRuntimeMode).toBe("follow-last");
+  });
+
+  it("accepts explicit runtime mode preferences in patches", () => {
+    expect(
+      decodeClientSettingsPatch({
+        defaultThreadRuntimeMode: "codex-auto-review",
+      }).defaultThreadRuntimeMode,
+    ).toBe("codex-auto-review");
+  });
+});
 
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {

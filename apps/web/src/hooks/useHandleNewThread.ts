@@ -1,5 +1,5 @@
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime";
-import { DEFAULT_RUNTIME_MODE, type ScopedProjectRef } from "@t3tools/contracts";
+import { type ScopedProjectRef } from "@t3tools/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -20,10 +20,12 @@ import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useUiStateStore } from "../uiStateStore";
 import { useSettings } from "./useSettings";
+import { resolveDefaultThreadRuntimeMode } from "../runtimeModeDefaults";
 
 function useNewThreadState() {
   const projects = useStore(useShallow((store) => selectProjectsAcrossEnvironments(store)));
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
+  const defaultThreadRuntimeMode = useSettings((settings) => settings.defaultThreadRuntimeMode);
   const router = useRouter();
   const getCurrentRouteTarget = useCallback(() => {
     const currentRouteParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
@@ -46,6 +48,7 @@ function useNewThreadState() {
         applyStickyState,
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
+        stickyRuntimeMode,
       } = useComposerDraftStore.getState();
       const currentRouteTarget = getCurrentRouteTarget();
       const project = projects.find(
@@ -118,6 +121,10 @@ function useNewThreadState() {
       const draftId = newDraftId();
       const threadId = newThreadId();
       const createdAt = new Date().toISOString();
+      const runtimeMode = resolveDefaultThreadRuntimeMode({
+        preference: defaultThreadRuntimeMode,
+        lastRuntimeMode: stickyRuntimeMode,
+      });
       return (async () => {
         setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, draftId, {
           threadId,
@@ -125,7 +132,7 @@ function useNewThreadState() {
           branch: options?.branch ?? null,
           worktreePath: options?.worktreePath ?? null,
           envMode: options?.envMode ?? "local",
-          runtimeMode: DEFAULT_RUNTIME_MODE,
+          runtimeMode,
         });
         applyStickyState(draftId);
 
@@ -135,7 +142,7 @@ function useNewThreadState() {
         });
       })();
     },
-    [getCurrentRouteTarget, projectGroupingSettings, router, projects],
+    [defaultThreadRuntimeMode, getCurrentRouteTarget, projectGroupingSettings, router, projects],
   );
 }
 
