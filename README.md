@@ -18,27 +18,29 @@ Fork-specific implementations are not intended to compete with upstream forever.
 
 ## Versioning
 
-Release versions in this fork follow upstream's semantic version as the first part of the tag, then add a fork-controlled CalVer date and revision number.
+Release versions in this fork use the current upstream version plus a semver-compatible date and revision suffix.
 
 Format:
 
 ```text
-v<upstream-semver>.<YYYYMMDD>.<revision>
+v<upstream-semver>-<YYYYMMDD>.<revision>
 ```
 
 Examples:
 
 ```text
-v0.0.24.20260519.1
-v0.0.24.20260519.2
-v0.0.24.20260519.3
+v0.0.24-20260519.1
+v0.0.24-20260519.2
+v0.0.24-20260519.3
 ```
 
 In these examples:
 
-- `0.0.24` follows the upstream T3 Code version.
+- `0.0.24` is the current upstream T3 Code version in `apps/desktop/package.json`.
 - `20260519` is the fork release date.
 - `1`, `2`, and `3` are fork-controlled revision numbers for that date.
+
+The date and revision stay in the semver prerelease suffix because desktop auto-updates rely on semver comparison. Do not use five-segment versions like `0.0.24.20260519.1`.
 
 ## Development
 

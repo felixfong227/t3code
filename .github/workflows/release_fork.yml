@@ -1,0 +1,370 @@
+name: Fork Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or SHA to release. Defaults to main."
+        required: false
+        default: main
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.release_meta.outputs.version }}
+      tag: ${{ steps.release_meta.outputs.tag }}
+      release_name: ${{ steps.release_meta.outputs.name }}
+      previous_tag: ${{ steps.release_meta.outputs.previous_tag }}
+      ref: ${{ steps.release_ref.outputs.sha }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - id: release_ref
+        name: Resolve release ref
+        shell: bash
+        env:
+          DISPATCH_REF: ${{ github.event.inputs.ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --tags --force
+
+          raw_ref="${DISPATCH_REF:-main}"
+          release_sha="$(git rev-parse "${raw_ref}^{commit}")"
+
+          if [[ -z "$release_sha" ]]; then
+            echo "Could not resolve release SHA." >&2
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$release_sha" origin/main; then
+            echo "Release SHA $release_sha is not reachable from origin/main." >&2
+            exit 1
+          fi
+
+          successful_ci_runs="$(
+            gh api -X GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f head_sha="$release_sha" \
+              -f status=completed \
+              --jq '[.workflow_runs[] | select(.conclusion == "success" and .head_branch == "main")] | length'
+          )"
+
+          if [[ "$successful_ci_runs" == "0" ]]; then
+            echo "No successful CI workflow run found for $release_sha on main." >&2
+            exit 1
+          fi
+
+          git checkout --detach "$release_sha"
+          echo "sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+      - id: release_meta
+        name: Resolve release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_date="$(date -u +%Y%m%d)"
+          base_version="$(
+            node -e 'const pkg = require("./apps/desktop/package.json"); process.stdout.write(String(pkg.version || "").replace(/^v/, ""));'
+          )"
+
+          if [[ ! "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid apps/desktop package version: $base_version" >&2
+            exit 1
+          fi
+
+          highest_revision=0
+          while IFS= read -r existing_tag; do
+            [[ -n "$existing_tag" ]] || continue
+            revision="${existing_tag##*.}"
+            if [[ "$revision" =~ ^[0-9]+$ && "$revision" -gt "$highest_revision" ]]; then
+              highest_revision="$revision"
+            fi
+          done < <(git tag --list "v${base_version}-${release_date}.*")
+
+          revision=$((highest_revision + 1))
+          version="${base_version}-${release_date}.${revision}"
+          tag="v${version}"
+
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Release tag $tag already exists." >&2
+            exit 1
+          fi
+
+          previous_tag="$(
+            {
+              git tag --list 'v[0-9]*'
+              echo "$tag"
+            } |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]{8}\.[0-9]+)?$' |
+              sort -V |
+              awk -v current="$tag" '$0 == current { print previous; exit } { previous = $0 }'
+          )"
+
+          {
+            echo "base_version=$base_version"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "name=T3 Code v$version"
+            echo "previous_tag=$previous_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Refuse existing release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin tag "$RELEASE_TAG" --force || true
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Release tag $RELEASE_TAG already exists." >&2
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: preflight
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            runner: macos-26
+            platform: mac
+            target: dmg
+            arch: arm64
+          - label: macOS x64
+            runner: macos-26-intel
+            platform: mac
+            target: dmg
+            arch: x64
+          - label: Linux x64
+            runner: ubuntu-24.04
+            platform: linux
+            target: AppImage
+            arch: x64
+          - label: Windows x64
+            runner: windows-2025
+            platform: win
+            target: nsis
+            arch: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Align package versions to release version
+        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      - name: Install Spectre-mitigated MSVC libs
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -products * -latest -property installationPath
+          $setupExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $proc = Start-Process -FilePath $setupExe `
+            -ArgumentList "modify", "--installPath", "`"$installPath`"", "--add", `
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64.Spectre", "--quiet", "--norestart" `
+            -Wait -PassThru -NoNewWindow
+          if ($null -eq $proc -or $proc.ExitCode -ne 0) {
+            $code = if ($null -ne $proc) { $proc.ExitCode } else { 1 }
+            Write-Error "Visual Studio Installer failed with exit code $code"
+            exit $code
+          }
+
+      - name: Build desktop artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=(
+            --platform "${{ matrix.platform }}"
+            --target "${{ matrix.target }}"
+            --arch "${{ matrix.arch }}"
+            --build-version "${{ needs.preflight.outputs.version }}"
+            --verbose
+          )
+
+          echo "Code signing disabled for fork release."
+
+          bun run dist:desktop:artifact -- "${args[@]}"
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-publish
+
+          shopt -s nullglob
+          for pattern in \
+            "release/*.dmg" \
+            "release/*.zip" \
+            "release/*.AppImage" \
+            "release/*.exe" \
+            "release/*.blockmap" \
+            "release/*.yml"; do
+            for file in $pattern; do
+              cp "$file" release-publish/
+            done
+          done
+
+          if [[ "${{ matrix.platform }}" == "mac" && "${{ matrix.arch }}" != "arm64" ]]; then
+            shopt -s nullglob
+            for manifest in release-publish/*-mac.yml; do
+              mv "$manifest" "${manifest%.yml}-${{ matrix.arch }}.yml"
+            done
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-publish/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [preflight, build]
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Install release tooling dependencies
+        run: bun install --frozen-lockfile --filter=@t3tools/scripts
+
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Merge macOS updater manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          for x64_manifest in release-assets/*-mac-x64.yml; do
+            arm64_manifest="${x64_manifest%-x64.yml}.yml"
+            if [[ -f "$arm64_manifest" ]]; then
+              node scripts/merge-update-manifests.ts --platform mac "$arm64_manifest" "$x64_manifest"
+              rm -f "$x64_manifest"
+            fi
+          done
+
+      - name: Create release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.ref }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin --tags --force
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Release tag $RELEASE_TAG already exists. Delete the failed release tag before rerunning." >&2
+            exit 1
+          fi
+
+          git tag "$RELEASE_TAG" "$RELEASE_SHA"
+          git push origin "$RELEASE_TAG"
+
+      - name: Publish release
+        if: needs.preflight.outputs.previous_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.preflight.outputs.tag }}
+          target_commitish: ${{ needs.preflight.outputs.ref }}
+          name: ${{ needs.preflight.outputs.release_name }}
+          generate_release_notes: true
+          previous_tag: ${{ needs.preflight.outputs.previous_tag }}
+          prerelease: false
+          make_latest: true
+          files: |
+            release-assets/*.dmg
+            release-assets/*.zip
+            release-assets/*.AppImage
+            release-assets/*.exe
+            release-assets/*.blockmap
+            release-assets/*.yml
+          fail_on_unmatched_files: true
+
+      - name: Publish first release
+        if: needs.preflight.outputs.previous_tag == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.preflight.outputs.tag }}
+          target_commitish: ${{ needs.preflight.outputs.ref }}
+          name: ${{ needs.preflight.outputs.release_name }}
+          generate_release_notes: true
+          prerelease: false
+          make_latest: true
+          files: |
+            release-assets/*.dmg
+            release-assets/*.zip
+            release-assets/*.AppImage
+            release-assets/*.exe
+            release-assets/*.blockmap
+            release-assets/*.yml
+          fail_on_unmatched_files: true
