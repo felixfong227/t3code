@@ -769,6 +769,107 @@ describe("deriveWorkLogEntries", () => {
     expect(entry?.command).toBe("bun run lint");
   });
 
+  it("extracts command output for expandable work-log details", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-tool-with-output",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          detail: "echo hello",
+          output: "$ echo hello\nhello",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.command).toBe("echo hello");
+    expect(entry?.output).toBe("$ echo hello\nhello");
+  });
+
+  it("extracts raw tool output for expandable work-log details", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "mcp-tool-with-output",
+        kind: "tool.completed",
+        summary: "Get issue",
+        payload: {
+          itemType: "mcp_tool_call",
+          data: {
+            rawOutput: {
+              content: '{\n  "id": "CP-228"\n}',
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.output).toBe('{\n  "id": "CP-228"\n}');
+  });
+
+  it("extracts MCP tool call result content for expandable work-log details", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "mcp-tool-with-result-content",
+        kind: "tool.completed",
+        summary: "MCP tool call",
+        payload: {
+          itemType: "mcp_tool_call",
+          data: {
+            item: {
+              arguments: {},
+              result: {
+                _meta: null,
+                content: [
+                  {
+                    type: "text",
+                    text: '{"resources":[]}',
+                  },
+                ],
+                structuredContent: null,
+              },
+              server: "codex",
+              status: "completed",
+              tool: "list_mcp_resources",
+              type: "mcpToolCall",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.toolTitle).toBe("list_mcp_resources");
+    expect(entry?.toolServer).toBe("codex");
+    expect(entry?.detail).toBeUndefined();
+    expect(entry?.output).toBe('{"resources":[]}');
+  });
+
+  it("extracts aggregated command output from completed Codex command items", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-tool-with-aggregated-output",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          detail: "echo test",
+          data: {
+            item: {
+              aggregatedOutput: "test\n",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.command).toBe("echo test");
+    expect(entry?.output).toBe("test\n");
+  });
+
   it("unwraps PowerShell command wrappers for displayed command text", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
@@ -986,6 +1087,34 @@ describe("deriveWorkLogEntries", () => {
       detail: "19 files",
       itemType: "web_search",
     });
+  });
+
+  it("drops generic tool update rows with no user-facing information", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-complete",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          detail: "bun typecheck",
+        },
+      }),
+      makeActivity({
+        id: "generic-tool-update",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.updated",
+        summary: "Tool updated",
+        payload: {
+          itemType: "command_execution",
+          status: "inProgress",
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries.map((entry) => entry.id)).toEqual(["command-complete"]);
   });
 
   it("uses completed read-file output previews and still collapses the same tool call", () => {

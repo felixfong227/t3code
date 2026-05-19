@@ -52,11 +52,13 @@ export interface WorkLogEntry {
   createdAt: string;
   label: string;
   detail?: string;
+  output?: string;
   command?: string;
   rawCommand?: string;
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolServer?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
 }
@@ -492,7 +494,8 @@ export function deriveWorkLogEntries(
     .filter((activity) => activity.kind !== "context-window.updated")
     .filter((activity) => activity.summary !== "Checkpoint captured")
     .filter((activity) => !isPlanBoundaryToolActivity(activity))
-    .map(toDerivedWorkLogEntry);
+    .map(toDerivedWorkLogEntry)
+    .filter((entry) => !isUninformativeToolUpdate(entry));
   return collapseDerivedWorkLogEntries(entries).map(
     ({ activityKind: _activityKind, collapseKey: _collapseKey, ...entry }) => entry,
   );
@@ -510,6 +513,22 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
   return typeof payload?.detail === "string" && payload.detail.startsWith("ExitPlanMode:");
 }
 
+function isUninformativeToolUpdate(entry: DerivedWorkLogEntry): boolean {
+  return (
+    entry.activityKind === "tool.updated" &&
+    normalizeCompactToolLabel(entry.label).toLowerCase() === "tool updated" &&
+    entry.detail === undefined &&
+    entry.output === undefined &&
+    entry.command === undefined &&
+    entry.rawCommand === undefined &&
+    entry.toolTitle === undefined &&
+    entry.toolServer === undefined &&
+    entry.toolCallId === undefined &&
+    entry.requestKind === undefined &&
+    (entry.changedFiles?.length ?? 0) === 0
+  );
+}
+
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const payload =
     activity.payload && typeof activity.payload === "object"
@@ -518,6 +537,8 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const server = extractToolServer(payload);
+  const output = extractToolOutput(payload);
   const isTaskActivity = activity.kind === "task.progress" || activity.kind === "task.completed";
   const taskSummary =
     isTaskActivity && typeof payload?.summary === "string" && payload.summary.length > 0
@@ -557,6 +578,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (detail) {
     entry.detail = detail;
   }
+  if (output) {
+    entry.output = output;
+  }
   if (commandPreview.command) {
     entry.command = commandPreview.command;
   }
@@ -568,6 +592,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   }
   if (title) {
     entry.toolTitle = title;
+  }
+  if (server) {
+    entry.toolServer = server;
   }
   if (itemType) {
     entry.itemType = itemType;
@@ -631,9 +658,11 @@ function mergeDerivedWorkLogEntries(
 ): DerivedWorkLogEntry {
   const changedFiles = mergeChangedFiles(previous.changedFiles, next.changedFiles);
   const detail = next.detail ?? previous.detail;
+  const output = next.output ?? previous.output;
   const command = next.command ?? previous.command;
   const rawCommand = next.rawCommand ?? previous.rawCommand;
   const toolTitle = next.toolTitle ?? previous.toolTitle;
+  const toolServer = next.toolServer ?? previous.toolServer;
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
@@ -642,10 +671,12 @@ function mergeDerivedWorkLogEntries(
     ...previous,
     ...next,
     ...(detail ? { detail } : {}),
+    ...(output ? { output } : {}),
     ...(command ? { command } : {}),
     ...(rawCommand ? { rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
     ...(toolTitle ? { toolTitle } : {}),
+    ...(toolServer ? { toolServer } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),
@@ -706,6 +737,13 @@ function asTrimmedString(value: unknown): string | null {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  return value.trim().length > 0 ? value : null;
 }
 
 function asNumber(value: unknown): number | null {
@@ -892,7 +930,20 @@ function extractToolCommand(payload: Record<string, unknown> | null): {
 }
 
 function extractToolTitle(payload: Record<string, unknown> | null): string | null {
-  return asTrimmedString(payload?.title);
+  const directTitle = asTrimmedString(payload?.title);
+  if (directTitle) {
+    return directTitle;
+  }
+
+  const data = asRecord(payload?.data);
+  const item = asRecord(data?.item);
+  return asTrimmedString(item?.tool);
+}
+
+function extractToolServer(payload: Record<string, unknown> | null): string | null {
+  const data = asRecord(payload?.data);
+  const item = asRecord(data?.item);
+  return asTrimmedString(item?.server);
 }
 
 function extractToolCallId(payload: Record<string, unknown> | null): string | null {
@@ -934,8 +985,64 @@ function summarizeToolTextOutput(value: string): string | null {
   return null;
 }
 
+function stringifyToolContentBlocks(value: unknown): string | null {
+  if (!Array.isArray(value)) {
+    return asNonEmptyString(value);
+  }
+
+  const parts = value
+    .map((entry) => {
+      const text = asNonEmptyString(entry);
+      if (text) {
+        return text;
+      }
+      const block = asRecord(entry);
+      return asNonEmptyString(block?.text);
+    })
+    .filter((entry): entry is string => entry !== null);
+
+  return parts.length > 0 ? parts.join("\n") : null;
+}
+
+function stringifyStructuredToolResult(value: unknown): string | null {
+  const text = asNonEmptyString(value);
+  if (text) {
+    return text;
+  }
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const serialized = JSON.stringify(value, null, 2);
+  return serialized && serialized !== "{}" ? serialized : null;
+}
+
+function stringifyToolResult(value: unknown): string | null {
+  const result = asRecord(value);
+  if (!result) {
+    return stringifyStructuredToolResult(value);
+  }
+
+  const content = stringifyToolContentBlocks(result.content);
+  if (content) {
+    return content;
+  }
+
+  const structuredContent = stringifyStructuredToolResult(result.structuredContent);
+  if (structuredContent) {
+    return structuredContent;
+  }
+
+  return stringifyStructuredToolResult(result);
+}
+
 function summarizeToolRawOutput(payload: Record<string, unknown> | null): string | null {
   const data = asRecord(payload?.data);
+  const item = asRecord(data?.item);
+  const aggregatedOutput = asNonEmptyString(item?.aggregatedOutput);
+  if (aggregatedOutput) {
+    return aggregatedOutput;
+  }
+
   const rawOutput = asRecord(data?.rawOutput);
   if (!rawOutput) {
     return null;
@@ -998,6 +1105,46 @@ function extractToolDetail(
   }
 
   return null;
+}
+
+function extractToolOutput(payload: Record<string, unknown> | null): string | null {
+  const directOutput = asNonEmptyString(payload?.output);
+  if (directOutput) {
+    return directOutput;
+  }
+
+  const output = asRecord(payload?.output);
+  const structuredOutput = asNonEmptyString(
+    output?.text ?? output?.content ?? output?.stdout ?? output?.stderr,
+  );
+  if (structuredOutput) {
+    return structuredOutput;
+  }
+
+  const data = asRecord(payload?.data);
+  const item = asRecord(data?.item);
+  const aggregatedOutput = asNonEmptyString(item?.aggregatedOutput);
+  if (aggregatedOutput) {
+    return aggregatedOutput;
+  }
+
+  const resultOutput = stringifyToolResult(item?.result);
+  if (resultOutput) {
+    return resultOutput;
+  }
+
+  const rawOutput = asRecord(data?.rawOutput);
+  if (!rawOutput) {
+    return null;
+  }
+  const rawOutputText = asNonEmptyString(
+    rawOutput.content ?? rawOutput.output ?? rawOutput.stdout ?? rawOutput.stderr,
+  );
+  if (rawOutputText) {
+    return rawOutputText;
+  }
+  const serialized = JSON.stringify(rawOutput, null, 2);
+  return serialized && serialized !== "{}" ? serialized : null;
 }
 
 function stripTrailingExitCode(value: string): {

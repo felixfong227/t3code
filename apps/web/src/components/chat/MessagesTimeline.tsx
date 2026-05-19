@@ -13,7 +13,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type ReactNode,
+  type SVGProps,
 } from "react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
@@ -32,7 +34,6 @@ import {
   EyeIcon,
   GlobeIcon,
   HammerIcon,
-  type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -1070,7 +1071,7 @@ function formatMessageMeta(
 }
 
 function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
+  icon: WorkEntryIcon;
   className: string;
 } {
   if (tone === "error") {
@@ -1104,6 +1105,32 @@ function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   return "text-muted-foreground/40";
 }
 
+function LinearMcpIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <path d="M5 19 19 5" />
+      <path d="M5 13 13 5" />
+      <path d="M11 19 19 11" />
+      <path d="M5 7 7 5" />
+    </svg>
+  );
+}
+
+function normalizeProviderKey(value: string | undefined): string {
+  return normalizeCompactToolLabel(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 function workEntryPreview(
   workEntry: Pick<TimelineWorkEntry, "detail" | "command" | "changedFiles">,
   workspaceRoot: string | undefined,
@@ -1129,7 +1156,9 @@ function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
-function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+type WorkEntryIcon = ComponentType<{ className?: string }>;
+
+function workEntryIcon(workEntry: TimelineWorkEntry): WorkEntryIcon {
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
   if (workEntry.requestKind === "file-change") return SquarePenIcon;
@@ -1145,6 +1174,9 @@ function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
 
   switch (workEntry.itemType) {
     case "mcp_tool_call":
+      if (normalizeProviderKey(workEntry.toolServer) === "linear") {
+        return LinearMcpIcon;
+      }
       return WrenchIcon;
     case "dynamic_tool_call":
     case "collab_agent_tool_call":
@@ -1162,11 +1194,16 @@ function capitalizePhrase(value: string): string {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
 }
 
+function formatToolDisplayName(value: string): string {
+  return capitalizePhrase(normalizeCompactToolLabel(value).replace(/[_-]+/g, " "));
+}
+
 function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  if (!workEntry.toolTitle) {
-    return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
+  const action = formatToolDisplayName(workEntry.toolTitle ?? workEntry.label);
+  if (workEntry.itemType === "mcp_tool_call" && workEntry.toolServer) {
+    return `${formatToolDisplayName(workEntry.toolServer)} MCP - ${action}`;
   }
-  return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
+  return action;
 }
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
@@ -1188,10 +1225,33 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
+  const [isOutputExpanded, setIsOutputExpanded] = useState(false);
+  const output = workEntry.output?.trimEnd();
+  const hasOutput = output !== undefined && output.trim().length > 0;
 
   return (
     <div className="rounded-lg px-1 py-1">
-      <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
+      <div
+        className={cn(
+          "flex items-center gap-2 transition-[opacity,translate] duration-200",
+          hasOutput ? "cursor-pointer rounded-md hover:bg-muted/25" : "",
+        )}
+        role={hasOutput ? "button" : undefined}
+        tabIndex={hasOutput ? 0 : undefined}
+        aria-expanded={hasOutput ? isOutputExpanded : undefined}
+        onClick={hasOutput ? () => setIsOutputExpanded((value) => !value) : undefined}
+        onKeyDown={
+          hasOutput
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                  return;
+                }
+                event.preventDefault();
+                setIsOutputExpanded((value) => !value);
+              }
+            : undefined
+        }
+      >
         <span
           className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
         >
@@ -1284,6 +1344,13 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               +{(workEntry.changedFiles?.length ?? 0) - 4}
             </span>
           )}
+        </div>
+      )}
+      {hasOutput && isOutputExpanded && (
+        <div className="mt-1 pl-6">
+          <pre className="max-h-72 overflow-auto rounded-lg border border-border/55 bg-muted/35 px-3 py-2 font-mono text-[11px] leading-5 text-foreground/80 whitespace-pre">
+            {output}
+          </pre>
         </div>
       )}
     </div>
