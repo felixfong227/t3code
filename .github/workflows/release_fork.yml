@@ -103,10 +103,10 @@ jobs:
             if [[ "$revision" =~ ^[0-9]+$ && "$revision" -gt "$highest_revision" ]]; then
               highest_revision="$revision"
             fi
-          done < <(git tag --list "v${base_version}.${release_date}.*")
+          done < <(git tag --list "v${base_version}-${release_date}.*")
 
           revision=$((highest_revision + 1))
-          version="${base_version}.${release_date}.${revision}"
+          version="${base_version}-${release_date}.${revision}"
           tag="v${version}"
 
           if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
@@ -119,7 +119,7 @@ jobs:
               git tag --list 'v[0-9]*'
               echo "$tag"
             } |
-              grep -E '^v[0-9]+(\.[0-9]+)+$' |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]{8}\.[0-9]+)?$' |
               sort -V |
               awk -v current="$tag" '$0 == current { print previous; exit } { previous = $0 }'
           )"
