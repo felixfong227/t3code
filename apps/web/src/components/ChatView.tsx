@@ -657,7 +657,6 @@ export default function ChatView(props: ChatViewProps) {
   const composerActiveProvider = useComposerDraftStore(
     (store) => store.getComposerDraft(composerDraftTarget)?.activeProvider ?? null,
   );
-  const stickyRuntimeMode = useComposerDraftStore((store) => store.stickyRuntimeMode);
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const setComposerDraftRuntimeMode = useComposerDraftStore((store) => store.setRuntimeMode);
   const setComposerDraftInteractionMode = useComposerDraftStore(
@@ -1064,9 +1063,10 @@ export default function ChatView(props: ChatViewProps) {
 
       const nextDraftId = newDraftId();
       const nextThreadId = newThreadId();
+      const latestStickyRuntimeMode = useComposerDraftStore.getState().stickyRuntimeMode;
       const nextRuntimeMode = resolveDefaultThreadRuntimeMode({
         preference: settings.defaultThreadRuntimeMode,
-        lastRuntimeMode: stickyRuntimeMode,
+        lastRuntimeMode: latestStickyRuntimeMode,
       });
       setLogicalProjectDraftThreadId(logicalProjectKey, activeProjectRef, nextDraftId, {
         threadId: nextThreadId,
@@ -1093,7 +1093,6 @@ export default function ChatView(props: ChatViewProps) {
       settings.defaultThreadRuntimeMode,
       setDraftThreadContext,
       setLogicalProjectDraftThreadId,
-      stickyRuntimeMode,
     ],
   );
 
@@ -2105,9 +2104,9 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   const handleRuntimeModeChange = useCallback(
-    (mode: RuntimeMode) => {
+    (mode: RuntimeMode, options?: { persistSticky?: boolean }) => {
       if (mode === runtimeMode) return;
-      setComposerDraftRuntimeMode(composerDraftTarget, mode);
+      setComposerDraftRuntimeMode(composerDraftTarget, mode, options);
       if (isLocalDraftThread) {
         setDraftThreadContext(composerDraftTarget, { runtimeMode: mode });
       }

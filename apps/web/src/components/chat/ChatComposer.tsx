@@ -472,7 +472,7 @@ export interface ChatComposerProps {
 
   onProviderModelSelect: (instanceId: ProviderInstanceId, model: string) => void;
   toggleInteractionMode: () => void;
-  handleRuntimeModeChange: (mode: RuntimeMode) => void;
+  handleRuntimeModeChange: (mode: RuntimeMode, options?: { persistSticky?: boolean }) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
   togglePlanSidebar: () => void;
 
@@ -764,7 +764,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (runtimeMode !== "codex-auto-review" || selectedProvider === "codex") {
       return;
     }
-    handleRuntimeModeChange("approval-required");
+    handleRuntimeModeChange("approval-required", { persistSticky: false });
   }, [handleRuntimeModeChange, runtimeMode, selectedProvider]);
   const selectedModelForPicker = selectedModel;
   // Instance-keyed option list so the picker can show each configured

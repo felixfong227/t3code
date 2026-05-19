@@ -1549,6 +1549,20 @@ describe("composerDraftStore runtime and interaction settings", () => {
     expect(useComposerDraftStore.getState().stickyRuntimeMode).toBe("codex-auto-review");
   });
 
+  it("can update a draft runtime mode without replacing the sticky runtime mode", () => {
+    const store = useComposerDraftStore.getState();
+    const correctionThreadId = ThreadId.make("thread-runtime-correction");
+    const correctionThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, correctionThreadId);
+
+    store.setRuntimeMode(threadRef, "codex-auto-review");
+    store.setRuntimeMode(correctionThreadRef, "approval-required", { persistSticky: false });
+
+    expect(draftFor(correctionThreadId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe(
+      "approval-required",
+    );
+    expect(useComposerDraftStore.getState().stickyRuntimeMode).toBe("codex-auto-review");
+  });
+
   it("applies sticky runtime mode to new drafts without overriding explicit draft context", () => {
     const store = useComposerDraftStore.getState();
     const seedThreadId = ThreadId.make("thread-seed-runtime");

@@ -410,6 +410,9 @@ interface ComposerDraftStoreState {
   setRuntimeMode: (
     threadRef: ComposerThreadTarget,
     runtimeMode: RuntimeMode | null | undefined,
+    options?: {
+      persistSticky?: boolean;
+    },
   ) => void;
   setInteractionMode: (
     threadRef: ComposerThreadTarget,
@@ -2712,21 +2715,24 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             };
           });
         },
-        setRuntimeMode: (threadRef, runtimeMode) => {
+        setRuntimeMode: (threadRef, runtimeMode, options) => {
           const threadKey = resolveComposerDraftKey(get(), threadRef) ?? "";
           if (threadKey.length === 0) {
             return;
           }
           const nextRuntimeMode = isRuntimeMode(runtimeMode) ? runtimeMode : null;
+          const persistSticky = options?.persistSticky !== false;
           set((state) => {
             const existing = state.draftsByThreadKey[threadKey];
             if (!existing && nextRuntimeMode === null) {
-              return state.stickyRuntimeMode === null ? state : { stickyRuntimeMode: null };
+              return persistSticky && state.stickyRuntimeMode !== null
+                ? { stickyRuntimeMode: null }
+                : state;
             }
             const base = existing ?? createEmptyThreadDraft();
             if (
               base.runtimeMode === nextRuntimeMode &&
-              state.stickyRuntimeMode === nextRuntimeMode
+              (!persistSticky || state.stickyRuntimeMode === nextRuntimeMode)
             ) {
               return state;
             }
@@ -2742,7 +2748,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             }
             return {
               draftsByThreadKey: nextDraftsByThreadKey,
-              stickyRuntimeMode: nextRuntimeMode,
+              ...(persistSticky ? { stickyRuntimeMode: nextRuntimeMode } : {}),
             };
           });
         },
