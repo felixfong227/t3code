@@ -37,8 +37,8 @@ jobs:
       - name: Build fork marketing site
         run: bun run build:fork-marketing
         env:
-          ASTRO_SITE: https://felixfong227.github.io
-          ASTRO_BASE: /t3code
+          FORK_MARKETING_SITE: https://felixfong227.github.io
+          FORK_MARKETING_BASE: /t3code
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

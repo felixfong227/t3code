@@ -1,7 +1,7 @@
 import { defineConfig } from "astro/config";
 
-const site = process.env.ASTRO_SITE ?? "https://felixfong227.github.io";
-const base = process.env.ASTRO_BASE ?? "/t3code";
+const site = process.env.FORK_MARKETING_SITE ?? "https://felixfong227.github.io";
+const base = process.env.FORK_MARKETING_BASE ?? "/t3code";
 
 export default defineConfig({
   site,
