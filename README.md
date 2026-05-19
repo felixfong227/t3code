@@ -15,6 +15,7 @@ Fork-specific implementations are not intended to compete with upstream forever.
 - Automation style settings and PR target handling ([#4](https://github.com/felixfong227/t3code/pull/4)) (Tracking [#2123](https://github.com/pingdotgg/t3code/pull/2123)).
 - Auto-review runtime mode for Codex sessions ([#5](https://github.com/felixfong227/t3code/pull/5)) (Tracking [#2384](https://github.com/pingdotgg/t3code/issues/2384)).
 - Change request numbers surfaced in thread navigation ([#6](https://github.com/felixfong227/t3code/pull/6)).
+- And more...
 
 ## Versioning
 

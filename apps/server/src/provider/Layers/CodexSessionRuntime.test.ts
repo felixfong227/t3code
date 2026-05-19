@@ -293,7 +293,9 @@ describe("openCodexThread", () => {
       ) => {
         calls.push({ method, payload });
         return Effect.succeed(
-          makeThreadOpenResponse("resumed-auto-review-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
+          makeThreadOpenResponse(
+            "resumed-auto-review-thread",
+          ) as CodexRpc.ClientRequestResponsesByMethod[M],
         );
       },
     };
