@@ -30,7 +30,6 @@ import {
   $getRoot,
   HISTORY_MERGE_TAG,
   DecoratorNode,
-  type ElementNode,
   type LexicalNode,
   type SerializedLexicalNode,
   type EditorState,
@@ -907,17 +906,54 @@ function $readExpandedSelectionOffsetFromEditorState(fallback: number): number {
   return Math.max(0, Math.min(offset, expandedLength));
 }
 
-function $appendTextWithLineBreaks(parent: ElementNode, text: string): void {
-  const lines = text.split("\n");
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.length > 0) {
-      parent.append($createTextNode(line));
+function $createComposerSegmentNodes(
+  segments: ReadonlyArray<ReturnType<typeof splitPromptIntoComposerSegments>[number]>,
+  skillMetadata: ReadonlyMap<string, ComposerSkillMetadata>,
+): LexicalNode[] {
+  const nodes: LexicalNode[] = [];
+
+  for (const segment of segments) {
+    if (segment.type === "mention") {
+      nodes.push($createComposerMentionNode(segment.path));
+      continue;
     }
-    if (index < lines.length - 1) {
-      parent.append($createLineBreakNode());
+    if (segment.type === "skill") {
+      const metadata = skillMetadata.get(segment.name);
+      nodes.push(
+        $createComposerSkillNode(
+          segment.name,
+          metadata?.label ?? formatProviderSkillDisplayName({ name: segment.name }),
+          metadata?.description ?? null,
+        ),
+      );
+      continue;
+    }
+    if (segment.type === "terminal-context") {
+      if (segment.context) {
+        nodes.push($createComposerTerminalContextNode(segment.context));
+      }
+      continue;
+    }
+    if (segment.type === "diff-context-comment") {
+      if (segment.comment) {
+        nodes.push($createComposerDiffContextCommentNode(segment.comment));
+      }
+      continue;
+    }
+
+    const lines = segment.text.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index] ?? "";
+      if (line.length > 0) {
+        nodes.push($createTextNode(line));
+      }
+      if (index < lines.length - 1) {
+        nodes.push($createLineBreakNode());
+      }
     }
   }
+
+  return nodes;
 }
 
 function $setComposerEditorPrompt(
@@ -932,36 +968,7 @@ function $setComposerEditorPrompt(
   root.append(paragraph);
 
   const segments = splitPromptIntoComposerSegments(prompt, terminalContexts, diffContextComments);
-  for (const segment of segments) {
-    if (segment.type === "mention") {
-      paragraph.append($createComposerMentionNode(segment.path));
-      continue;
-    }
-    if (segment.type === "skill") {
-      const metadata = skillMetadata.get(segment.name);
-      paragraph.append(
-        $createComposerSkillNode(
-          segment.name,
-          metadata?.label ?? formatProviderSkillDisplayName({ name: segment.name }),
-          metadata?.description ?? null,
-        ),
-      );
-      continue;
-    }
-    if (segment.type === "terminal-context") {
-      if (segment.context) {
-        paragraph.append($createComposerTerminalContextNode(segment.context));
-      }
-      continue;
-    }
-    if (segment.type === "diff-context-comment") {
-      if (segment.comment) {
-        paragraph.append($createComposerDiffContextCommentNode(segment.comment));
-      }
-      continue;
-    }
-    $appendTextWithLineBreaks(paragraph, segment.text);
-  }
+  paragraph.append(...$createComposerSegmentNodes(segments, skillMetadata));
 }
 
 function collectTerminalContextIds(node: LexicalNode): string[] {
@@ -1740,12 +1747,13 @@ function ComposerPromptEditorInner({
           end: snapshotRef.current.expandedCursor,
         };
         const nextValue = `${currentValue.slice(0, range.start)}${pastedText}${currentValue.slice(range.end)}`;
-        $setComposerEditorPrompt(
-          nextValue,
-          terminalContextsRef.current,
-          diffContextCommentsRef.current,
-          skillMetadataRef.current,
-        );
+        $setSelectionRangeAtComposerOffsets(range.start, range.end);
+        const replacementSelection = $getSelection();
+        if ($isRangeSelection(replacementSelection)) {
+          replacementSelection.insertNodes(
+            $createComposerSegmentNodes(pastedSegments, skillMetadataRef.current),
+          );
+        }
         $setSelectionAtComposerOffset(
           collapseExpandedComposerCursor(nextValue, range.start + pastedText.length),
         );

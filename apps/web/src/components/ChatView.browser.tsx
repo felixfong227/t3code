@@ -6263,8 +6263,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
     try {
       await waitForComposerEditor();
+      for (const char of "@world ") {
+        await pressComposerKey(char);
+      }
+      await waitForComposerText("@world ");
       await pasteComposerText("use $agent-browser and @AGENTS.md ");
-      await waitForComposerText("use $agent-browser and @AGENTS.md ");
+      await waitForComposerText("@world use $agent-browser and @AGENTS.md ");
 
       await waitForElement(
         () => document.querySelector<HTMLElement>('[data-composer-skill-chip="true"]'),
@@ -6274,6 +6278,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         () => document.querySelector<HTMLElement>('[data-composer-mention-chip="true"]'),
         "Unable to find rendered composer mention chip after paste.",
       );
+      expect(document.querySelectorAll('[data-composer-mention-chip="true"]')).toHaveLength(1);
 
       const sendButton = await waitForSendButton();
       expect(sendButton.disabled).toBe(false);
@@ -6292,7 +6297,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
                 };
               }
             | undefined;
-          expect(turnStartRequest?.message?.text).toBe("use $agent-browser and @AGENTS.md");
+          expect(turnStartRequest?.message?.text).toBe("@world use $agent-browser and @AGENTS.md");
         },
         { timeout: 8_000, interval: 16 },
       );
