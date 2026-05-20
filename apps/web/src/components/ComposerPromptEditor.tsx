@@ -26,6 +26,7 @@ import {
   KEY_TAB_COMMAND,
   COMMAND_PRIORITY_HIGH,
   KEY_BACKSPACE_COMMAND,
+  PASTE_COMMAND,
   $getRoot,
   HISTORY_MERGE_TAG,
   DecoratorNode,
@@ -1707,6 +1708,60 @@ function ComposerPromptEditorInner({
     snapshotRef.current = snapshot;
     return snapshot;
   }, [editor]);
+
+  const insertPastedInlineTokens = useCallback(
+    (pastedText: string): boolean => {
+      if (!pastedText) {
+        return false;
+      }
+
+      const pastedSegments = splitPromptIntoComposerSegments(pastedText);
+      if (
+        !pastedSegments.some((segment) => segment.type === "mention" || segment.type === "skill")
+      ) {
+        return false;
+      }
+
+      editor.update(() => {
+        const currentValue = $getRoot().getTextContent();
+        const selection = $getSelection();
+        const range = getSelectionRangeForExpandedComposerOffsets(selection) ?? {
+          start: snapshotRef.current.expandedCursor,
+          end: snapshotRef.current.expandedCursor,
+        };
+        const nextValue = `${currentValue.slice(0, range.start)}${pastedText}${currentValue.slice(range.end)}`;
+        $setComposerEditorPrompt(
+          nextValue,
+          terminalContexts,
+          diffContextComments,
+          skillMetadataRef.current,
+        );
+        $setSelectionAtComposerOffset(
+          collapseExpandedComposerCursor(nextValue, range.start + pastedText.length),
+        );
+      });
+      return true;
+    },
+    [diffContextComments, editor, terminalContexts],
+  );
+
+  useEffect(() => {
+    return editor.registerCommand(
+      PASTE_COMMAND,
+      (event) => {
+        const clipboardData = event instanceof ClipboardEvent ? event.clipboardData : null;
+        if (!clipboardData || clipboardData.files.length > 0) {
+          return false;
+        }
+        if (!insertPastedInlineTokens(clipboardData.getData("text/plain"))) {
+          return false;
+        }
+        event.preventDefault();
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor, insertPastedInlineTokens]);
 
   useImperativeHandle(
     editorRef,
