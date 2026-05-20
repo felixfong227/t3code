@@ -111,6 +111,28 @@ vi.mock("~/lib/gitReactQuery", () => ({
 }));
 
 vi.mock("~/lib/gitStatusState", () => ({
+  getGitStatusSnapshot: () => ({
+    data: {
+      isRepo: true,
+      sourceControlProvider: {
+        kind: "github",
+        name: "GitHub",
+        baseUrl: "https://github.com",
+      },
+      hasPrimaryRemote: true,
+      isDefaultRef: false,
+      refName: BRANCH_NAME,
+      hasWorkingTreeChanges: false,
+      workingTree: { files: [], insertions: 0, deletions: 0 },
+      hasUpstream: true,
+      aheadCount: 1,
+      behindCount: 0,
+      pr: null,
+    },
+    error: null,
+    cause: null,
+    isPending: false,
+  }),
   refreshGitStatus: refreshGitStatusSpy,
   resetGitStatusStateForTests: () => undefined,
   useGitStatus: vi.fn(() => ({
@@ -132,8 +154,11 @@ vi.mock("~/lib/gitStatusState", () => ({
       pr: null,
     },
     error: null,
+    cause: null,
     isPending: false,
   })),
+  useGitStatusRevision: () => 0,
+  watchGitStatus: () => () => undefined,
 }));
 
 vi.mock("~/localApi", () => ({
