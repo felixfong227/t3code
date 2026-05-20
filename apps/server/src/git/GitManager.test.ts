@@ -936,6 +936,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(status).toEqual({
         isRepo: false,
+        pullRequestTargetRemotes: [],
         hasPrimaryRemote: false,
         isDefaultRef: false,
         refName: null,
@@ -966,6 +967,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(status).toEqual({
         isRepo: false,
+        pullRequestTargetRemotes: [],
         hasPrimaryRemote: false,
         isDefaultRef: false,
         refName: null,
@@ -2776,8 +2778,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager, ghCalls } = yield* makeManager({
         ghScenario: {
-          prListSequenceByHeadSelector: {
-            "felixfong227:felix/integrate-pr-2305-1003": [
+          prListSequenceByRepositoryAndHeadSelector: {
+            "pingdotgg/t3code\0felixfong227:felix/integrate-pr-2305-1003": [
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -2799,6 +2801,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 },
               ]),
             ],
+          },
+          prListSequenceByHeadSelector: {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             "origin:felix/integrate-pr-2305-1003": [JSON.stringify([])],
             // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -2848,8 +2852,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager, ghCalls } = yield* makeManager({
         ghScenario: {
-          prListSequenceByHeadSelector: {
-            "felix/integrate-pr-2305-1003": [
+          prListSequenceByRepositoryAndHeadSelector: {
+            "felixfong227/t3code\0felix/integrate-pr-2305-1003": [
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -2888,6 +2892,14 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                   },
                 },
               ]),
+            ],
+          },
+          prListSequenceByHeadSelector: {
+            "felix/integrate-pr-2305-1003": [
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
             ],
           },
           prListByHeadSelector: {
