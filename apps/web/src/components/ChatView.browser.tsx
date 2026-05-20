@@ -6251,6 +6251,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
           },
         ];
       },
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
     });
 
     try {
@@ -6265,6 +6273,28 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForElement(
         () => document.querySelector<HTMLElement>('[data-composer-mention-chip="true"]'),
         "Unable to find rendered composer mention chip after paste.",
+      );
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const turnStartRequest = wsRequests.find(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "thread.turn.start",
+          ) as
+            | {
+                message?: {
+                  text?: string;
+                };
+              }
+            | undefined;
+          expect(turnStartRequest?.message?.text).toBe("use $agent-browser and @AGENTS.md");
+        },
+        { timeout: 8_000, interval: 16 },
       );
     } finally {
       await mounted.cleanup();
