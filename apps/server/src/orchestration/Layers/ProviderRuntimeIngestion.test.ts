@@ -911,6 +911,68 @@ describe("ProviderRuntimeIngestion", () => {
     expect(payload?.output).toBe("$ echo hello\nhello");
   });
 
+  it("clears buffered command output when the provider session exits", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-command-output-before-exit"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-command-output-exit"),
+      itemId: asItemId("item-command-output-exit"),
+      payload: {
+        streamKind: "command_output",
+        delta: "orphaned output\n",
+      },
+    });
+    harness.emit({
+      type: "session.exited",
+      eventId: asEventId("evt-session-exited-command-output"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        reason: "provider stopped",
+        recoverable: true,
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-command-output-after-exit-completed"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-command-output-exit"),
+      itemId: asItemId("item-command-output-exit"),
+      payload: {
+        itemType: "command_execution",
+        status: "completed",
+        title: "Ran command",
+        detail: "echo orphaned",
+      },
+    });
+
+    const thread = await waitForThread(harness.readModel, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) =>
+          activity.id === "evt-command-output-after-exit-completed",
+      ),
+    );
+    const activity = thread.activities.find(
+      (entry: ProviderRuntimeTestActivity) =>
+        entry.id === "evt-command-output-after-exit-completed",
+    );
+    const payload =
+      activity?.payload && typeof activity.payload === "object"
+        ? (activity.payload as Record<string, unknown>)
+        : undefined;
+
+    expect(payload?.output).toBeUndefined();
+  });
+
   it("uses structured read-file paths when available", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";

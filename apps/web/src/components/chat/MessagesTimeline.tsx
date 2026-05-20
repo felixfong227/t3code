@@ -15,7 +15,6 @@ import {
   useState,
   type ComponentType,
   type ReactNode,
-  type SVGProps,
 } from "react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
@@ -1105,30 +1104,87 @@ function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   return "text-muted-foreground/40";
 }
 
-function LinearMcpIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      {...props}
-    >
-      <path d="M5 19 19 5" />
-      <path d="M5 13 13 5" />
-      <path d="M11 19 19 11" />
-      <path d="M5 7 7 5" />
-    </svg>
-  );
-}
-
 function normalizeProviderKey(value: string | undefined): string {
   return normalizeCompactToolLabel(value ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+}
+
+const SIMPLE_ICON_MODULE_PREFIX = "../../../node_modules/simple-icons/icons/";
+const simpleIconModules = import.meta.glob<string>(
+  "../../../node_modules/simple-icons/icons/*.svg",
+  {
+    query: "?raw",
+    import: "default",
+  },
+);
+
+function extractSimpleIconPath(svg: string): string | null {
+  return /<path\b[^>]*\sd="([^"]+)"/u.exec(svg)?.[1] ?? null;
+}
+
+function SimpleBrandIcon(props: { iconKey: string; className?: string | undefined }) {
+  const { iconKey, className } = props;
+  const [path, setPath] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPath(null);
+    setMissing(false);
+
+    const loadIcon = simpleIconModules[`${SIMPLE_ICON_MODULE_PREFIX}${iconKey}.svg`];
+    if (!loadIcon) {
+      setMissing(true);
+      return;
+    }
+
+    void loadIcon()
+      .then((svg) => {
+        if (!cancelled) {
+          setPath(extractSimpleIconPath(svg));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMissing(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [iconKey]);
+
+  if (missing || !path) {
+    return <WrenchIcon className={className} />;
+  }
+
+  return (
+    <svg aria-hidden="true" className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d={path} />
+    </svg>
+  );
+}
+
+const simpleBrandIconByProviderKey = new Map<string, WorkEntryIcon>();
+
+function simpleBrandIconForProvider(provider: string | undefined): WorkEntryIcon {
+  const iconKey = normalizeProviderKey(provider);
+  if (!iconKey) {
+    return WrenchIcon;
+  }
+
+  const cachedIcon = simpleBrandIconByProviderKey.get(iconKey);
+  if (cachedIcon) {
+    return cachedIcon;
+  }
+
+  const McpBrandIcon = function McpBrandIcon(props: { className?: string | undefined }) {
+    return <SimpleBrandIcon iconKey={iconKey} className={props.className} />;
+  };
+  simpleBrandIconByProviderKey.set(iconKey, McpBrandIcon);
+  return McpBrandIcon;
 }
 
 function workEntryPreview(
@@ -1174,10 +1230,7 @@ function workEntryIcon(workEntry: TimelineWorkEntry): WorkEntryIcon {
 
   switch (workEntry.itemType) {
     case "mcp_tool_call":
-      if (normalizeProviderKey(workEntry.toolServer) === "linear") {
-        return LinearMcpIcon;
-      }
-      return WrenchIcon;
+      return simpleBrandIconForProvider(workEntry.toolServer);
     case "dynamic_tool_call":
     case "collab_agent_tool_call":
       return HammerIcon;

@@ -21,6 +21,7 @@ import type {
   ThreadSession,
   TurnDiffSummary,
 } from "./types";
+import { normalizeCompactToolLabel } from "./lib/toolLabels";
 
 export type ProviderPickerKind = ProviderDriverKind;
 
@@ -711,10 +712,6 @@ function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | un
   return [itemType, normalizedLabel, detail].join("\u001f");
 }
 
-function normalizeCompactToolLabel(value: string): string {
-  return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
-}
-
 function toLatestProposedPlanState(proposedPlan: ProposedPlan): LatestProposedPlanState {
   return {
     id: proposedPlan.id,
@@ -1040,7 +1037,7 @@ function summarizeToolRawOutput(payload: Record<string, unknown> | null): string
   const item = asRecord(data?.item);
   const aggregatedOutput = asNonEmptyString(item?.aggregatedOutput);
   if (aggregatedOutput) {
-    return aggregatedOutput;
+    return summarizeToolTextOutput(aggregatedOutput);
   }
 
   const rawOutput = asRecord(data?.rawOutput);
