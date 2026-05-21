@@ -1736,20 +1736,20 @@ function ComposerPromptEditorInner({
           start: snapshotRef.current.expandedCursor,
           end: snapshotRef.current.expandedCursor,
         };
-        const nextValue = `${currentValue.slice(0, range.start)}${pastedText}${currentValue.slice(range.end)}`;
+        const collapsedStart = collapseExpandedComposerCursor(currentValue, range.start);
+        const pastedNodes = $createComposerSegmentNodes(pastedSegments, skillMetadataRef.current);
+        const nextCursorFallback =
+          collapsedStart +
+          pastedNodes.reduce((sum, node) => sum + getComposerNodeTextLength(node), 0);
         $setSelectionRangeAtComposerOffsets(
-          collapseExpandedComposerCursor(currentValue, range.start),
+          collapsedStart,
           collapseExpandedComposerCursor(currentValue, range.end),
         );
         const replacementSelection = $getSelection();
         if ($isRangeSelection(replacementSelection)) {
-          replacementSelection.insertNodes(
-            $createComposerSegmentNodes(pastedSegments, skillMetadataRef.current),
-          );
+          replacementSelection.insertNodes(pastedNodes);
         }
-        $setSelectionAtComposerOffset(
-          collapseExpandedComposerCursor(nextValue, range.start + pastedText.length),
-        );
+        $setSelectionAtComposerOffset($readSelectionOffsetFromEditorState(nextCursorFallback));
       });
       return true;
     },

@@ -6269,6 +6269,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForComposerText("@world");
       await pasteComposerText(" use $agent-browser and @AGENTS.md ");
       await waitForComposerText("@world use $agent-browser and @AGENTS.md ");
+      await pressComposerKey("!");
+      await waitForComposerText("@world use $agent-browser and @AGENTS.md !");
 
       await waitForElement(
         () => document.querySelector<HTMLElement>('[data-composer-skill-chip="true"]'),
@@ -6297,7 +6299,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
                 };
               }
             | undefined;
-          expect(turnStartRequest?.message?.text).toBe("@world use $agent-browser and @AGENTS.md");
+          expect(turnStartRequest?.message?.text).toBe(
+            "@world use $agent-browser and @AGENTS.md !",
+          );
         },
         { timeout: 8_000, interval: 16 },
       );
