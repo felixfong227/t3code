@@ -63,8 +63,11 @@ import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 
 vi.mock("../lib/gitStatusState", () => ({
+  getGitStatusSnapshot: () => ({ data: null, error: null, cause: null, isPending: false }),
   useGitStatus: () => ({ data: null, error: null, cause: null, isPending: false }),
   useGitStatuses: () => new Map(),
+  useGitStatusRevision: () => 0,
+  watchGitStatus: () => () => undefined,
   refreshGitStatus: () => Promise.resolve(null),
   resetGitStatusStateForTests: () => undefined,
 }));
@@ -1239,6 +1242,23 @@ async function pressComposerUndo(): Promise<void> {
       cancelable: true,
     }),
   );
+  await waitForLayout();
+}
+
+async function pasteComposerText(text: string, files: readonly File[] = []): Promise<void> {
+  const composerEditor = await waitForComposerEditor();
+  const pasteEvent = new ClipboardEvent("paste", {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(pasteEvent, "clipboardData", {
+    value: {
+      files,
+      getData: (type: string) => (type === "text/plain" ? text : ""),
+    },
+  });
+  composerEditor.focus();
+  composerEditor.dispatchEvent(pasteEvent);
   await waitForLayout();
 }
 
@@ -6197,6 +6217,97 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
           expect(tooltip).not.toBeNull();
           expect(tooltip?.textContent).toContain("Open pages, click around, and inspect web apps.");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("renders pasted file mentions and skills as composer chips", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-rich-paste-target" as MessageId,
+        targetText: "rich paste target",
+      }),
+      configureFixture: (nextFixture) => {
+        const provider = nextFixture.serverConfig.providers[0];
+        if (!provider) {
+          throw new Error("Expected default provider in test fixture.");
+        }
+        (
+          provider as {
+            skills: ServerConfig["providers"][number]["skills"];
+          }
+        ).skills = [
+          {
+            name: "agent-browser",
+            displayName: "Agent Browser",
+            description: "Open pages, click around, and inspect web apps.",
+            path: "/Users/test/.agents/skills/agent-browser/SKILL.md",
+            enabled: true,
+          },
+        ];
+      },
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await waitForComposerEditor();
+      for (const char of "@world") {
+        await pressComposerKey(char);
+      }
+      await waitForComposerText("@world");
+      await pasteComposerText(" use $agent-browser and @AGENTS.md ", [
+        new File(["image"], "paste.png", { type: "image/png" }),
+      ]);
+      await waitForComposerText("@world use $agent-browser and @AGENTS.md ");
+      await pressComposerKey("!");
+      await waitForComposerText("@world use $agent-browser and @AGENTS.md !");
+
+      await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-composer-skill-chip="true"]'),
+        "Unable to find rendered composer skill chip after paste.",
+      );
+      await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-composer-mention-chip="true"]'),
+        "Unable to find rendered composer mention chip after paste.",
+      );
+      await waitForElement(
+        () => document.querySelector<HTMLElement>('img[alt="paste.png"]'),
+        "Unable to find pasted image preview after mixed text and file paste.",
+      );
+      expect(document.querySelectorAll('[data-composer-mention-chip="true"]')).toHaveLength(1);
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const turnStartRequest = wsRequests.find(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "thread.turn.start",
+          ) as
+            | {
+                message?: {
+                  text?: string;
+                };
+              }
+            | undefined;
+          expect(turnStartRequest?.message?.text).toBe(
+            "@world use $agent-browser and @AGENTS.md !",
+          );
         },
         { timeout: 8_000, interval: 16 },
       );

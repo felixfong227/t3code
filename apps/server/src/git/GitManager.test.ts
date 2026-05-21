@@ -5,10 +5,12 @@ import { spawnSync } from "node:child_process";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { expect } from "vitest";
@@ -207,7 +209,16 @@ function makeTempDir(
 ): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope> {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem.makeTempDirectoryScoped({ prefix });
+    const directory = yield* fileSystem.makeTempDirectory({ prefix });
+    yield* Effect.addFinalizer(() =>
+      removePath(directory).pipe(
+        Effect.retry(
+          Schedule.addDelay(Schedule.recurs(5), () => Effect.succeed(Duration.millis(20))),
+        ),
+        Effect.ignore({ log: true }),
+      ),
+    );
+    return directory;
   });
 }
 
@@ -936,6 +947,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(status).toEqual({
         isRepo: false,
+        pullRequestTargetRemotes: [],
         hasPrimaryRemote: false,
         isDefaultRef: false,
         refName: null,
@@ -966,6 +978,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(status).toEqual({
         isRepo: false,
+        pullRequestTargetRemotes: [],
         hasPrimaryRemote: false,
         isDefaultRef: false,
         refName: null,
@@ -2776,8 +2789,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager, ghCalls } = yield* makeManager({
         ghScenario: {
-          prListSequenceByHeadSelector: {
-            "felixfong227:felix/integrate-pr-2305-1003": [
+          prListSequenceByRepositoryAndHeadSelector: {
+            "pingdotgg/t3code\0felixfong227:felix/integrate-pr-2305-1003": [
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -2799,6 +2812,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 },
               ]),
             ],
+          },
+          prListSequenceByHeadSelector: {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             "origin:felix/integrate-pr-2305-1003": [JSON.stringify([])],
             // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -2848,8 +2863,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager, ghCalls } = yield* makeManager({
         ghScenario: {
-          prListSequenceByHeadSelector: {
-            "felix/integrate-pr-2305-1003": [
+          prListSequenceByRepositoryAndHeadSelector: {
+            "felixfong227/t3code\0felix/integrate-pr-2305-1003": [
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -2888,6 +2903,14 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                   },
                 },
               ]),
+            ],
+          },
+          prListSequenceByHeadSelector: {
+            "felix/integrate-pr-2305-1003": [
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
             ],
           },
           prListByHeadSelector: {

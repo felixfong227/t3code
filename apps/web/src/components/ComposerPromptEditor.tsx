@@ -26,10 +26,10 @@ import {
   KEY_TAB_COMMAND,
   COMMAND_PRIORITY_HIGH,
   KEY_BACKSPACE_COMMAND,
+  PASTE_COMMAND,
   $getRoot,
   HISTORY_MERGE_TAG,
   DecoratorNode,
-  type ElementNode,
   type LexicalNode,
   type SerializedLexicalNode,
   type EditorState,
@@ -906,17 +906,54 @@ function $readExpandedSelectionOffsetFromEditorState(fallback: number): number {
   return Math.max(0, Math.min(offset, expandedLength));
 }
 
-function $appendTextWithLineBreaks(parent: ElementNode, text: string): void {
-  const lines = text.split("\n");
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.length > 0) {
-      parent.append($createTextNode(line));
+function $createComposerSegmentNodes(
+  segments: ReadonlyArray<ReturnType<typeof splitPromptIntoComposerSegments>[number]>,
+  skillMetadata: ReadonlyMap<string, ComposerSkillMetadata>,
+): LexicalNode[] {
+  const nodes: LexicalNode[] = [];
+
+  for (const segment of segments) {
+    if (segment.type === "mention") {
+      nodes.push($createComposerMentionNode(segment.path));
+      continue;
     }
-    if (index < lines.length - 1) {
-      parent.append($createLineBreakNode());
+    if (segment.type === "skill") {
+      const metadata = skillMetadata.get(segment.name);
+      nodes.push(
+        $createComposerSkillNode(
+          segment.name,
+          metadata?.label ?? formatProviderSkillDisplayName({ name: segment.name }),
+          metadata?.description ?? null,
+        ),
+      );
+      continue;
+    }
+    if (segment.type === "terminal-context") {
+      if (segment.context) {
+        nodes.push($createComposerTerminalContextNode(segment.context));
+      }
+      continue;
+    }
+    if (segment.type === "diff-context-comment") {
+      if (segment.comment) {
+        nodes.push($createComposerDiffContextCommentNode(segment.comment));
+      }
+      continue;
+    }
+
+    const lines = segment.text.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index] ?? "";
+      if (line.length > 0) {
+        nodes.push($createTextNode(line));
+      }
+      if (index < lines.length - 1) {
+        nodes.push($createLineBreakNode());
+      }
     }
   }
+
+  return nodes;
 }
 
 function $setComposerEditorPrompt(
@@ -931,36 +968,7 @@ function $setComposerEditorPrompt(
   root.append(paragraph);
 
   const segments = splitPromptIntoComposerSegments(prompt, terminalContexts, diffContextComments);
-  for (const segment of segments) {
-    if (segment.type === "mention") {
-      paragraph.append($createComposerMentionNode(segment.path));
-      continue;
-    }
-    if (segment.type === "skill") {
-      const metadata = skillMetadata.get(segment.name);
-      paragraph.append(
-        $createComposerSkillNode(
-          segment.name,
-          metadata?.label ?? formatProviderSkillDisplayName({ name: segment.name }),
-          metadata?.description ?? null,
-        ),
-      );
-      continue;
-    }
-    if (segment.type === "terminal-context") {
-      if (segment.context) {
-        paragraph.append($createComposerTerminalContextNode(segment.context));
-      }
-      continue;
-    }
-    if (segment.type === "diff-context-comment") {
-      if (segment.comment) {
-        paragraph.append($createComposerDiffContextCommentNode(segment.comment));
-      }
-      continue;
-    }
-    $appendTextWithLineBreaks(paragraph, segment.text);
-  }
+  paragraph.append(...$createComposerSegmentNodes(segments, skillMetadata));
 }
 
 function collectTerminalContextIds(node: LexicalNode): string[] {
@@ -1707,6 +1715,64 @@ function ComposerPromptEditorInner({
     snapshotRef.current = snapshot;
     return snapshot;
   }, [editor]);
+
+  const insertPastedInlineTokens = useCallback(
+    (pastedText: string): boolean => {
+      if (!pastedText) {
+        return false;
+      }
+
+      const pastedSegments = splitPromptIntoComposerSegments(pastedText);
+      if (
+        !pastedSegments.some((segment) => segment.type === "mention" || segment.type === "skill")
+      ) {
+        return false;
+      }
+
+      editor.update(() => {
+        const currentValue = $getRoot().getTextContent();
+        const selection = $getSelection();
+        const range = getSelectionRangeForExpandedComposerOffsets(selection) ?? {
+          start: snapshotRef.current.expandedCursor,
+          end: snapshotRef.current.expandedCursor,
+        };
+        const collapsedStart = collapseExpandedComposerCursor(currentValue, range.start);
+        const pastedNodes = $createComposerSegmentNodes(pastedSegments, skillMetadataRef.current);
+        const nextCursorFallback =
+          collapsedStart +
+          pastedNodes.reduce((sum, node) => sum + getComposerNodeTextLength(node), 0);
+        $setSelectionRangeAtComposerOffsets(
+          collapsedStart,
+          collapseExpandedComposerCursor(currentValue, range.end),
+        );
+        const replacementSelection = $getSelection();
+        if ($isRangeSelection(replacementSelection)) {
+          replacementSelection.insertNodes(pastedNodes);
+        }
+        $setSelectionAtComposerOffset($readSelectionOffsetFromEditorState(nextCursorFallback));
+      });
+      return true;
+    },
+    [editor],
+  );
+
+  useEffect(() => {
+    return editor.registerCommand(
+      PASTE_COMMAND,
+      (event) => {
+        const clipboardData = event instanceof ClipboardEvent ? event.clipboardData : null;
+        if (!clipboardData) {
+          return false;
+        }
+        if (!insertPastedInlineTokens(clipboardData.getData("text/plain"))) {
+          return false;
+        }
+        event.preventDefault();
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor, insertPastedInlineTokens]);
 
   useImperativeHandle(
     editorRef,
