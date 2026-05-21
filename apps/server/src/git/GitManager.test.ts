@@ -5,10 +5,12 @@ import { spawnSync } from "node:child_process";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { expect } from "vitest";
@@ -207,7 +209,16 @@ function makeTempDir(
 ): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope> {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem.makeTempDirectoryScoped({ prefix });
+    const directory = yield* fileSystem.makeTempDirectory({ prefix });
+    yield* Effect.addFinalizer(() =>
+      removePath(directory).pipe(
+        Effect.retry(
+          Schedule.addDelay(Schedule.recurs(5), () => Effect.succeed(Duration.millis(20))),
+        ),
+        Effect.ignore({ log: true }),
+      ),
+    );
+    return directory;
   });
 }
 
