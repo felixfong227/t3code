@@ -1555,8 +1555,6 @@ function ComposerPromptEditorInner({
   const diffContextCommentsSignatureRef = useRef(diffContextCommentsSignature);
   const skillsSignature = skillSignature(skills);
   const skillsSignatureRef = useRef(skillsSignature);
-  const terminalContextsRef = useRef(terminalContexts);
-  const diffContextCommentsRef = useRef(diffContextComments);
   const skillMetadataRef = useRef(skillMetadataByName(skills));
   const snapshotRef = useRef({
     value,
@@ -1578,14 +1576,6 @@ function ComposerPromptEditorInner({
   useLayoutEffect(() => {
     skillMetadataRef.current = skillMetadataByName(skills);
   }, [skills]);
-
-  useEffect(() => {
-    terminalContextsRef.current = terminalContexts;
-  }, [terminalContexts]);
-
-  useEffect(() => {
-    diffContextCommentsRef.current = diffContextComments;
-  }, [diffContextComments]);
 
   useEffect(() => {
     editor.setEditable(!disabled);
@@ -1747,7 +1737,10 @@ function ComposerPromptEditorInner({
           end: snapshotRef.current.expandedCursor,
         };
         const nextValue = `${currentValue.slice(0, range.start)}${pastedText}${currentValue.slice(range.end)}`;
-        $setSelectionRangeAtComposerOffsets(range.start, range.end);
+        $setSelectionRangeAtComposerOffsets(
+          collapseExpandedComposerCursor(currentValue, range.start),
+          collapseExpandedComposerCursor(currentValue, range.end),
+        );
         const replacementSelection = $getSelection();
         if ($isRangeSelection(replacementSelection)) {
           replacementSelection.insertNodes(

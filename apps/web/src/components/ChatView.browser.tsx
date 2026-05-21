@@ -6263,11 +6263,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
     try {
       await waitForComposerEditor();
-      for (const char of "@world ") {
+      for (const char of "@world") {
         await pressComposerKey(char);
       }
-      await waitForComposerText("@world ");
-      await pasteComposerText("use $agent-browser and @AGENTS.md ");
+      await waitForComposerText("@world");
+      await pasteComposerText(" use $agent-browser and @AGENTS.md ");
       await waitForComposerText("@world use $agent-browser and @AGENTS.md ");
 
       await waitForElement(
