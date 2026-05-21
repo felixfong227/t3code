@@ -1761,7 +1761,7 @@ function ComposerPromptEditorInner({
       PASTE_COMMAND,
       (event) => {
         const clipboardData = event instanceof ClipboardEvent ? event.clipboardData : null;
-        if (!clipboardData || clipboardData.files.length > 0) {
+        if (!clipboardData) {
           return false;
         }
         if (!insertPastedInlineTokens(clipboardData.getData("text/plain"))) {

@@ -1245,7 +1245,7 @@ async function pressComposerUndo(): Promise<void> {
   await waitForLayout();
 }
 
-async function pasteComposerText(text: string): Promise<void> {
+async function pasteComposerText(text: string, files: readonly File[] = []): Promise<void> {
   const composerEditor = await waitForComposerEditor();
   const pasteEvent = new ClipboardEvent("paste", {
     bubbles: true,
@@ -1253,7 +1253,7 @@ async function pasteComposerText(text: string): Promise<void> {
   });
   Object.defineProperty(pasteEvent, "clipboardData", {
     value: {
-      files: [],
+      files,
       getData: (type: string) => (type === "text/plain" ? text : ""),
     },
   });
@@ -6267,7 +6267,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
         await pressComposerKey(char);
       }
       await waitForComposerText("@world");
-      await pasteComposerText(" use $agent-browser and @AGENTS.md ");
+      await pasteComposerText(" use $agent-browser and @AGENTS.md ", [
+        new File(["image"], "paste.png", { type: "image/png" }),
+      ]);
       await waitForComposerText("@world use $agent-browser and @AGENTS.md ");
       await pressComposerKey("!");
       await waitForComposerText("@world use $agent-browser and @AGENTS.md !");
@@ -6279,6 +6281,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForElement(
         () => document.querySelector<HTMLElement>('[data-composer-mention-chip="true"]'),
         "Unable to find rendered composer mention chip after paste.",
+      );
+      await waitForElement(
+        () => document.querySelector<HTMLElement>('img[alt="paste.png"]'),
+        "Unable to find pasted image preview after mixed text and file paste.",
       );
       expect(document.querySelectorAll('[data-composer-mention-chip="true"]')).toHaveLength(1);
 
