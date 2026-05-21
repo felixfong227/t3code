@@ -2,9 +2,15 @@ import * as Equal from "effect/Equal";
 import { type TimelineEntry, type WorkLogEntry } from "../../session-logic";
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
 import { type MessageId, type TurnId } from "@t3tools/contracts";
-export { normalizeCompactToolLabel } from "../../lib/toolLabels";
+import { normalizeCompactToolLabel } from "../../lib/toolLabels";
+export { normalizeCompactToolLabel };
 
 export const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
+
+export interface ProviderIconReference {
+  type: "simple-icon";
+  iconKey: string;
+}
 
 export interface TimelineDurationMessage {
   id: string;
@@ -44,6 +50,47 @@ export type MessagesTimelineRow =
 export interface StableMessagesTimelineRowsState {
   byId: Map<string, MessagesTimelineRow>;
   result: MessagesTimelineRow[];
+}
+
+export function normalizeProviderIconKey(value: string | undefined): string {
+  return normalizeCompactToolLabel(value ?? "")
+    .toLowerCase()
+    .replace(/\b(?:mcp|server)\b/g, " ")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+export function simpleIconKeyForIconKey(
+  iconKey: string,
+  availableIconKeys: ReadonlySet<string>,
+): string | null {
+  return availableIconKeys.has(iconKey) ? iconKey : null;
+}
+
+export function simpleIconKeyForProvider(
+  value: string | undefined,
+  availableIconKeys: ReadonlySet<string>,
+): string | null {
+  const iconKey = normalizeProviderIconKey(value);
+  return iconKey ? simpleIconKeyForIconKey(iconKey, availableIconKeys) : null;
+}
+
+export function resolveProviderIconReference(
+  value: string | undefined,
+  availableIconKeys: ReadonlySet<string>,
+): ProviderIconReference | null {
+  const iconKey = normalizeProviderIconKey(value);
+  if (!iconKey) {
+    return null;
+  }
+
+  if (simpleIconKeyForIconKey(iconKey, availableIconKeys)) {
+    return {
+      type: "simple-icon",
+      iconKey,
+    };
+  }
+
+  return null;
 }
 
 export function computeMessageDurationStart(

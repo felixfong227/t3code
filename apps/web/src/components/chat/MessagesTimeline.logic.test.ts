@@ -4,8 +4,13 @@ import {
   computeMessageDurationStart,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
+  normalizeProviderIconKey,
+  resolveProviderIconReference,
   resolveAssistantMessageCopyState,
+  simpleIconKeyForProvider,
 } from "./MessagesTimeline.logic";
+
+const availableSimpleIconKeys = new Set(["figma", "github", "gitlab", "jira", "linear"]);
 
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {
@@ -147,6 +152,36 @@ describe("normalizeCompactToolLabel", () => {
 
   it("removes trailing completion wording from other labels", () => {
     expect(normalizeCompactToolLabel("Read file completed")).toBe("Read file");
+  });
+});
+
+describe("simpleIconKeyForProvider", () => {
+  it.each([
+    ["GitHub MCP", "github", "simple-icon"],
+    ["GitLab MCP server", "gitlab", "simple-icon"],
+    ["Linear MCP", "linear", "simple-icon"],
+    ["Jira MCP", "jira", "simple-icon"],
+    ["Figma MCP server", "figma", "simple-icon"],
+  ] as const)("resolves %s to the %s provider icon", (providerName, iconKey, expectedType) => {
+    expect(normalizeProviderIconKey(providerName)).toBe(iconKey);
+
+    const iconReference = resolveProviderIconReference(providerName, availableSimpleIconKeys);
+    expect(iconReference).toMatchObject({ type: expectedType, iconKey });
+  });
+
+  it("uses the existing fallback when a company logo is not available", () => {
+    expect(normalizeProviderIconKey("Slack MCP server")).toBe("slack");
+    expect(resolveProviderIconReference("Slack MCP server", availableSimpleIconKeys)).toBeNull();
+  });
+
+  it("normalizes compact completion wording before icon lookup", () => {
+    expect(normalizeProviderIconKey("GitHub completed")).toBe("github");
+    expect(simpleIconKeyForProvider("GitHub completed", availableSimpleIconKeys)).toBe("github");
+  });
+
+  it("returns null when there is no provider name", () => {
+    expect(simpleIconKeyForProvider(undefined, availableSimpleIconKeys)).toBeNull();
+    expect(simpleIconKeyForProvider("   ", availableSimpleIconKeys)).toBeNull();
   });
 });
 

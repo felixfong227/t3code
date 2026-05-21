@@ -50,6 +50,7 @@ import {
   MAX_VISIBLE_WORK_LOG_ENTRIES,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
+  resolveProviderIconReference,
   resolveAssistantMessageCopyState,
   type StableMessagesTimelineRowsState,
   type MessagesTimelineRow,
@@ -73,6 +74,11 @@ import {
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import figmaIconSvg from "simple-icons/icons/figma.svg?raw";
+import githubIconSvg from "simple-icons/icons/github.svg?raw";
+import gitlabIconSvg from "simple-icons/icons/gitlab.svg?raw";
+import jiraIconSvg from "simple-icons/icons/jira.svg?raw";
+import linearIconSvg from "simple-icons/icons/linear.svg?raw";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -1104,59 +1110,29 @@ function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   return "text-muted-foreground/40";
 }
 
-function normalizeProviderKey(value: string | undefined): string {
-  return normalizeCompactToolLabel(value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-const SIMPLE_ICON_MODULE_PREFIX = "../../../node_modules/simple-icons/icons/";
-const simpleIconModules = import.meta.glob<string>(
-  "../../../node_modules/simple-icons/icons/*.svg",
-  {
-    query: "?raw",
-    import: "default",
-  },
-);
-
 function extractSimpleIconPath(svg: string): string | null {
   return /<path\b[^>]*\sd="([^"]+)"/u.exec(svg)?.[1] ?? null;
 }
 
+const simpleIconPathByKey = new Map(
+  Object.entries({
+    figma: figmaIconSvg,
+    github: githubIconSvg,
+    gitlab: gitlabIconSvg,
+    jira: jiraIconSvg,
+    linear: linearIconSvg,
+  }).flatMap(([iconKey, svg]) => {
+    const path = extractSimpleIconPath(svg);
+    return path ? [[iconKey, path] as const] : [];
+  }),
+);
+const simpleIconKeys = new Set(simpleIconPathByKey.keys());
+
 function SimpleBrandIcon(props: { iconKey: string; className?: string | undefined }) {
   const { iconKey, className } = props;
-  const [path, setPath] = useState<string | null>(null);
-  const [missing, setMissing] = useState(false);
+  const path = simpleIconPathByKey.get(iconKey);
 
-  useEffect(() => {
-    let cancelled = false;
-    setPath(null);
-    setMissing(false);
-
-    const loadIcon = simpleIconModules[`${SIMPLE_ICON_MODULE_PREFIX}${iconKey}.svg`];
-    if (!loadIcon) {
-      setMissing(true);
-      return;
-    }
-
-    void loadIcon()
-      .then((svg) => {
-        if (!cancelled) {
-          setPath(extractSimpleIconPath(svg));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMissing(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [iconKey]);
-
-  if (missing || !path) {
+  if (!path) {
     return <WrenchIcon className={className} />;
   }
 
@@ -1165,26 +1141,6 @@ function SimpleBrandIcon(props: { iconKey: string; className?: string | undefine
       <path d={path} />
     </svg>
   );
-}
-
-const simpleBrandIconByProviderKey = new Map<string, WorkEntryIcon>();
-
-function simpleBrandIconForProvider(provider: string | undefined): WorkEntryIcon {
-  const iconKey = normalizeProviderKey(provider);
-  if (!iconKey) {
-    return WrenchIcon;
-  }
-
-  const cachedIcon = simpleBrandIconByProviderKey.get(iconKey);
-  if (cachedIcon) {
-    return cachedIcon;
-  }
-
-  const McpBrandIcon = function McpBrandIcon(props: { className?: string | undefined }) {
-    return <SimpleBrandIcon iconKey={iconKey} className={props.className} />;
-  };
-  simpleBrandIconByProviderKey.set(iconKey, McpBrandIcon);
-  return McpBrandIcon;
 }
 
 function workEntryPreview(
@@ -1214,29 +1170,39 @@ function workEntryRawCommand(
 
 type WorkEntryIcon = ComponentType<{ className?: string }>;
 
-function workEntryIcon(workEntry: TimelineWorkEntry): WorkEntryIcon {
-  if (workEntry.requestKind === "command") return TerminalIcon;
-  if (workEntry.requestKind === "file-read") return EyeIcon;
-  if (workEntry.requestKind === "file-change") return SquarePenIcon;
+interface WorkEntryIconConfig {
+  icon: WorkEntryIcon;
+  iconKey?: string | undefined;
+}
+
+function workEntryIcon(workEntry: TimelineWorkEntry): WorkEntryIconConfig {
+  if (workEntry.requestKind === "command") return { icon: TerminalIcon };
+  if (workEntry.requestKind === "file-read") return { icon: EyeIcon };
+  if (workEntry.requestKind === "file-change") return { icon: SquarePenIcon };
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
-    return TerminalIcon;
+    return { icon: TerminalIcon };
   }
   if (workEntry.itemType === "file_change" || (workEntry.changedFiles?.length ?? 0) > 0) {
-    return SquarePenIcon;
+    return { icon: SquarePenIcon };
   }
-  if (workEntry.itemType === "web_search") return GlobeIcon;
-  if (workEntry.itemType === "image_view") return EyeIcon;
+  if (workEntry.itemType === "web_search") return { icon: GlobeIcon };
+  if (workEntry.itemType === "image_view") return { icon: EyeIcon };
 
   switch (workEntry.itemType) {
-    case "mcp_tool_call":
-      return simpleBrandIconForProvider(workEntry.toolServer);
+    case "mcp_tool_call": {
+      const providerIcon = resolveProviderIconReference(workEntry.toolServer, simpleIconKeys);
+      if (providerIcon?.type === "simple-icon") {
+        return { icon: WrenchIcon, iconKey: providerIcon.iconKey };
+      }
+      return { icon: WrenchIcon };
+    }
     case "dynamic_tool_call":
     case "collab_agent_tool_call":
-      return HammerIcon;
+      return { icon: HammerIcon };
   }
 
-  return workToneIcon(workEntry.tone).icon;
+  return { icon: workToneIcon(workEntry.tone).icon };
 }
 
 function capitalizePhrase(value: string): string {
@@ -1265,7 +1231,8 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
 }) {
   const { workEntry, workspaceRoot } = props;
   const iconConfig = workToneIcon(workEntry.tone);
-  const EntryIcon = workEntryIcon(workEntry);
+  const entryIconConfig = workEntryIcon(workEntry);
+  const EntryIcon = entryIconConfig.icon;
   const heading = toolWorkEntryHeading(workEntry);
   const rawPreview = workEntryPreview(workEntry, workspaceRoot);
   const preview =
@@ -1308,7 +1275,11 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
         <span
           className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
         >
-          <EntryIcon className="size-3" />
+          {entryIconConfig.iconKey ? (
+            <SimpleBrandIcon className="size-3" iconKey={entryIconConfig.iconKey} />
+          ) : (
+            <EntryIcon className="size-3" />
+          )}
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
           {rawCommand ? (
