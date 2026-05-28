@@ -74,11 +74,31 @@ import {
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import anthropicIconSvg from "simple-icons/icons/anthropic.svg?raw";
+import asanaIconSvg from "simple-icons/icons/asana.svg?raw";
+import datadogIconSvg from "simple-icons/icons/datadog.svg?raw";
+import discordIconSvg from "simple-icons/icons/discord.svg?raw";
+import dockerIconSvg from "simple-icons/icons/docker.svg?raw";
 import figmaIconSvg from "simple-icons/icons/figma.svg?raw";
+import gmailIconSvg from "simple-icons/icons/gmail.svg?raw";
+import googleCalendarIconSvg from "simple-icons/icons/googlecalendar.svg?raw";
+import googleCloudIconSvg from "simple-icons/icons/googlecloud.svg?raw";
+import googleDocsIconSvg from "simple-icons/icons/googledocs.svg?raw";
+import googleDriveIconSvg from "simple-icons/icons/googledrive.svg?raw";
+import googleSheetsIconSvg from "simple-icons/icons/googlesheets.svg?raw";
 import githubIconSvg from "simple-icons/icons/github.svg?raw";
 import gitlabIconSvg from "simple-icons/icons/gitlab.svg?raw";
 import jiraIconSvg from "simple-icons/icons/jira.svg?raw";
+import kubernetesIconSvg from "simple-icons/icons/kubernetes.svg?raw";
 import linearIconSvg from "simple-icons/icons/linear.svg?raw";
+import netlifyIconSvg from "simple-icons/icons/netlify.svg?raw";
+import notionIconSvg from "simple-icons/icons/notion.svg?raw";
+import postgresqlIconSvg from "simple-icons/icons/postgresql.svg?raw";
+import sentryIconSvg from "simple-icons/icons/sentry.svg?raw";
+import stripeIconSvg from "simple-icons/icons/stripe.svg?raw";
+import supabaseIconSvg from "simple-icons/icons/supabase.svg?raw";
+import trelloIconSvg from "simple-icons/icons/trello.svg?raw";
+import vercelIconSvg from "simple-icons/icons/vercel.svg?raw";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -1116,11 +1136,31 @@ function extractSimpleIconPath(svg: string): string | null {
 
 const simpleIconPathByKey = new Map(
   Object.entries({
+    anthropic: anthropicIconSvg,
+    asana: asanaIconSvg,
+    datadog: datadogIconSvg,
+    discord: discordIconSvg,
+    docker: dockerIconSvg,
     figma: figmaIconSvg,
+    gmail: gmailIconSvg,
+    googlecalendar: googleCalendarIconSvg,
+    googlecloud: googleCloudIconSvg,
+    googledocs: googleDocsIconSvg,
+    googledrive: googleDriveIconSvg,
+    googlesheets: googleSheetsIconSvg,
     github: githubIconSvg,
     gitlab: gitlabIconSvg,
     jira: jiraIconSvg,
+    kubernetes: kubernetesIconSvg,
     linear: linearIconSvg,
+    netlify: netlifyIconSvg,
+    notion: notionIconSvg,
+    postgresql: postgresqlIconSvg,
+    sentry: sentryIconSvg,
+    stripe: stripeIconSvg,
+    supabase: supabaseIconSvg,
+    trello: trelloIconSvg,
+    vercel: vercelIconSvg,
   }).flatMap(([iconKey, svg]) => {
     const path = extractSimpleIconPath(svg);
     return path ? [[iconKey, path] as const] : [];
