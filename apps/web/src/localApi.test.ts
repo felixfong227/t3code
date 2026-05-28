@@ -599,7 +599,9 @@ describe("wsApi", () => {
 
   it("reads and writes persistence through the desktop bridge when available", async () => {
     const clientSettings = {
+      autoCollapseSessionSidebarForNarrowChat: true,
       autoOpenPlanSidebar: false,
+      autoReopenSessionSidebarWhenSpaceAvailable: true,
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       dismissedProviderUpdateNotificationKeys: [],
@@ -662,7 +664,9 @@ describe("wsApi", () => {
     const { createLocalApi } = await import("./localApi");
     const api = createLocalApi(rpcClientMock as never);
     const clientSettings = {
+      autoCollapseSessionSidebarForNarrowChat: true,
       autoOpenPlanSidebar: false,
+      autoReopenSessionSidebarWhenSpaceAvailable: true,
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       dismissedProviderUpdateNotificationKeys: [],

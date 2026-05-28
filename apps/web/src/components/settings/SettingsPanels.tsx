@@ -405,6 +405,14 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.autoOpenPlanSidebar !== DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar
         ? ["Auto-open task panel"]
         : []),
+      ...(settings.autoCollapseSessionSidebarForNarrowChat !==
+      DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat
+        ? ["Auto-collapse session sidebar"]
+        : []),
+      ...(settings.autoReopenSessionSidebarWhenSpaceAvailable !==
+      DEFAULT_UNIFIED_SETTINGS.autoReopenSessionSidebarWhenSpaceAvailable
+        ? ["Auto-reopen session sidebar"]
+        : []),
       ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
         ? ["Assistant output"]
         : []),
@@ -432,7 +440,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ],
     [
       isGitWritingModelDirty,
+      settings.autoCollapseSessionSidebarForNarrowChat,
       settings.autoOpenPlanSidebar,
+      settings.autoReopenSessionSidebarWhenSpaceAvailable,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
@@ -464,7 +474,11 @@ export function useSettingsRestore(onRestored?: () => void) {
       diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
+      autoCollapseSessionSidebarForNarrowChat:
+        DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat,
       autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
+      autoReopenSessionSidebarWhenSpaceAvailable:
+        DEFAULT_UNIFIED_SETTINGS.autoReopenSessionSidebarWhenSpaceAvailable,
       enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
@@ -697,6 +711,67 @@ export function GeneralSettingsPanel() {
                 updateSettings({ autoOpenPlanSidebar: Boolean(checked) })
               }
               aria-label="Open the task panel automatically"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Auto-collapse session sidebar"
+          description="Collapse the session sidebar when the chat panel becomes too narrow."
+          resetAction={
+            settings.autoCollapseSessionSidebarForNarrowChat !==
+            DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat ? (
+              <SettingResetButton
+                label="auto-collapse session sidebar"
+                onClick={() =>
+                  updateSettings({
+                    autoCollapseSessionSidebarForNarrowChat:
+                      DEFAULT_UNIFIED_SETTINGS.autoCollapseSessionSidebarForNarrowChat,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.autoCollapseSessionSidebarForNarrowChat}
+              onCheckedChange={(checked) =>
+                updateSettings({
+                  autoCollapseSessionSidebarForNarrowChat: Boolean(checked),
+                })
+              }
+              aria-label="Collapse the session sidebar when chat is narrow"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Auto-reopen session sidebar"
+          description="Reopen the session sidebar when there is enough room after it was auto-collapsed."
+          resetAction={
+            settings.autoReopenSessionSidebarWhenSpaceAvailable !==
+            DEFAULT_UNIFIED_SETTINGS.autoReopenSessionSidebarWhenSpaceAvailable ? (
+              <SettingResetButton
+                label="auto-reopen session sidebar"
+                onClick={() =>
+                  updateSettings({
+                    autoReopenSessionSidebarWhenSpaceAvailable:
+                      DEFAULT_UNIFIED_SETTINGS.autoReopenSessionSidebarWhenSpaceAvailable,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.autoReopenSessionSidebarWhenSpaceAvailable}
+              disabled={!settings.autoCollapseSessionSidebarForNarrowChat}
+              onCheckedChange={(checked) =>
+                updateSettings({
+                  autoReopenSessionSidebarWhenSpaceAvailable: Boolean(checked),
+                })
+              }
+              aria-label="Reopen the session sidebar when space is available"
             />
           }
         />

@@ -1,3 +1,47 @@
+export const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
+
 export function canCollapseAppSidebar(pathname: string): boolean {
   return !pathname.startsWith("/settings");
+}
+
+export function shouldWatchForDelayedChatPanel(pathname: string): boolean {
+  return canCollapseAppSidebar(pathname) && pathname !== "/";
+}
+
+export function shouldAutoCollapseAppSidebar(input: {
+  canCollapse: boolean;
+  enabled: boolean;
+  isMobile: boolean;
+  open: boolean;
+  chatPanelWidth: number;
+  minChatPanelWidth?: number;
+}): boolean {
+  return (
+    input.enabled &&
+    input.canCollapse &&
+    !input.isMobile &&
+    input.open &&
+    input.chatPanelWidth < (input.minChatPanelWidth ?? THREAD_MAIN_CONTENT_MIN_WIDTH)
+  );
+}
+
+export function shouldAutoReopenAppSidebar(input: {
+  canCollapse: boolean;
+  enabled: boolean;
+  isMobile: boolean;
+  open: boolean;
+  wasAutoCollapsed: boolean;
+  chatPanelWidth: number;
+  sidebarWidth: number;
+  minChatPanelWidth?: number;
+}): boolean {
+  return (
+    input.enabled &&
+    input.canCollapse &&
+    !input.isMobile &&
+    !input.open &&
+    input.wasAutoCollapsed &&
+    input.chatPanelWidth - input.sidebarWidth >=
+      (input.minChatPanelWidth ?? THREAD_MAIN_CONTENT_MIN_WIDTH)
+  );
 }
