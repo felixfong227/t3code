@@ -4,8 +4,39 @@ import {
   computeMessageDurationStart,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
+  normalizeProviderIconKey,
+  resolveProviderIconReference,
   resolveAssistantMessageCopyState,
+  simpleIconKeyForProvider,
 } from "./MessagesTimeline.logic";
+
+const availableSimpleIconKeys = new Set([
+  "anthropic",
+  "asana",
+  "datadog",
+  "discord",
+  "docker",
+  "figma",
+  "gmail",
+  "googlecalendar",
+  "googlecloud",
+  "googledocs",
+  "googledrive",
+  "googlesheets",
+  "github",
+  "gitlab",
+  "jira",
+  "kubernetes",
+  "linear",
+  "netlify",
+  "notion",
+  "postgresql",
+  "sentry",
+  "stripe",
+  "supabase",
+  "trello",
+  "vercel",
+]);
 
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {
@@ -147,6 +178,56 @@ describe("normalizeCompactToolLabel", () => {
 
   it("removes trailing completion wording from other labels", () => {
     expect(normalizeCompactToolLabel("Read file completed")).toBe("Read file");
+  });
+});
+
+describe("simpleIconKeyForProvider", () => {
+  it.each([
+    ["Anthropic MCP", "anthropic", "simple-icon"],
+    ["Asana MCP", "asana", "simple-icon"],
+    ["Datadog MCP", "datadog", "simple-icon"],
+    ["Discord MCP", "discord", "simple-icon"],
+    ["Docker MCP", "docker", "simple-icon"],
+    ["GitHub MCP", "github", "simple-icon"],
+    ["GitLab MCP server", "gitlab", "simple-icon"],
+    ["Gmail MCP", "gmail", "simple-icon"],
+    ["Google Calendar MCP", "googlecalendar", "simple-icon"],
+    ["Google Cloud MCP", "googlecloud", "simple-icon"],
+    ["Google Docs MCP", "googledocs", "simple-icon"],
+    ["Google Drive MCP", "googledrive", "simple-icon"],
+    ["Google Sheets MCP", "googlesheets", "simple-icon"],
+    ["Linear MCP", "linear", "simple-icon"],
+    ["Jira MCP", "jira", "simple-icon"],
+    ["Kubernetes MCP", "kubernetes", "simple-icon"],
+    ["Netlify MCP", "netlify", "simple-icon"],
+    ["Notion MCP", "notion", "simple-icon"],
+    ["PostgreSQL MCP", "postgresql", "simple-icon"],
+    ["Sentry MCP", "sentry", "simple-icon"],
+    ["Stripe MCP", "stripe", "simple-icon"],
+    ["Supabase MCP", "supabase", "simple-icon"],
+    ["Trello MCP", "trello", "simple-icon"],
+    ["Vercel MCP", "vercel", "simple-icon"],
+    ["Figma MCP server", "figma", "simple-icon"],
+  ] as const)("resolves %s to the %s provider icon", (providerName, iconKey, expectedType) => {
+    expect(normalizeProviderIconKey(providerName)).toBe(iconKey);
+
+    const iconReference = resolveProviderIconReference(providerName, availableSimpleIconKeys);
+    expect(iconReference).toMatchObject({ type: expectedType, iconKey });
+  });
+
+  it("uses the existing fallback when a company logo is not available", () => {
+    expect(normalizeProviderIconKey("Slack MCP server")).toBe("slack");
+    expect(resolveProviderIconReference("Slack MCP server", availableSimpleIconKeys)).toBeNull();
+  });
+
+  it("normalizes compact completion wording before icon lookup", () => {
+    expect(normalizeProviderIconKey("GitHub completed")).toBe("github");
+    expect(simpleIconKeyForProvider("GitHub completed", availableSimpleIconKeys)).toBe("github");
+  });
+
+  it("returns null when there is no provider name", () => {
+    expect(simpleIconKeyForProvider(undefined, availableSimpleIconKeys)).toBeNull();
+    expect(simpleIconKeyForProvider("   ", availableSimpleIconKeys)).toBeNull();
   });
 });
 

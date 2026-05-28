@@ -13,6 +13,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type ReactNode,
 } from "react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
@@ -32,7 +33,6 @@ import {
   EyeIcon,
   GlobeIcon,
   HammerIcon,
-  type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -50,6 +50,7 @@ import {
   MAX_VISIBLE_WORK_LOG_ENTRIES,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
+  resolveProviderIconReference,
   resolveAssistantMessageCopyState,
   type StableMessagesTimelineRowsState,
   type MessagesTimelineRow,
@@ -73,6 +74,31 @@ import {
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import anthropicIconSvg from "simple-icons/icons/anthropic.svg?raw";
+import asanaIconSvg from "simple-icons/icons/asana.svg?raw";
+import datadogIconSvg from "simple-icons/icons/datadog.svg?raw";
+import discordIconSvg from "simple-icons/icons/discord.svg?raw";
+import dockerIconSvg from "simple-icons/icons/docker.svg?raw";
+import figmaIconSvg from "simple-icons/icons/figma.svg?raw";
+import gmailIconSvg from "simple-icons/icons/gmail.svg?raw";
+import googleCalendarIconSvg from "simple-icons/icons/googlecalendar.svg?raw";
+import googleCloudIconSvg from "simple-icons/icons/googlecloud.svg?raw";
+import googleDocsIconSvg from "simple-icons/icons/googledocs.svg?raw";
+import googleDriveIconSvg from "simple-icons/icons/googledrive.svg?raw";
+import googleSheetsIconSvg from "simple-icons/icons/googlesheets.svg?raw";
+import githubIconSvg from "simple-icons/icons/github.svg?raw";
+import gitlabIconSvg from "simple-icons/icons/gitlab.svg?raw";
+import jiraIconSvg from "simple-icons/icons/jira.svg?raw";
+import kubernetesIconSvg from "simple-icons/icons/kubernetes.svg?raw";
+import linearIconSvg from "simple-icons/icons/linear.svg?raw";
+import netlifyIconSvg from "simple-icons/icons/netlify.svg?raw";
+import notionIconSvg from "simple-icons/icons/notion.svg?raw";
+import postgresqlIconSvg from "simple-icons/icons/postgresql.svg?raw";
+import sentryIconSvg from "simple-icons/icons/sentry.svg?raw";
+import stripeIconSvg from "simple-icons/icons/stripe.svg?raw";
+import supabaseIconSvg from "simple-icons/icons/supabase.svg?raw";
+import trelloIconSvg from "simple-icons/icons/trello.svg?raw";
+import vercelIconSvg from "simple-icons/icons/vercel.svg?raw";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -1070,7 +1096,7 @@ function formatMessageMeta(
 }
 
 function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
+  icon: WorkEntryIcon;
   className: string;
 } {
   if (tone === "error") {
@@ -1104,6 +1130,59 @@ function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   return "text-muted-foreground/40";
 }
 
+function extractSimpleIconPath(svg: string): string | null {
+  return /<path\b[^>]*\sd="([^"]+)"/u.exec(svg)?.[1] ?? null;
+}
+
+const simpleIconPathByKey = new Map(
+  Object.entries({
+    anthropic: anthropicIconSvg,
+    asana: asanaIconSvg,
+    datadog: datadogIconSvg,
+    discord: discordIconSvg,
+    docker: dockerIconSvg,
+    figma: figmaIconSvg,
+    gmail: gmailIconSvg,
+    googlecalendar: googleCalendarIconSvg,
+    googlecloud: googleCloudIconSvg,
+    googledocs: googleDocsIconSvg,
+    googledrive: googleDriveIconSvg,
+    googlesheets: googleSheetsIconSvg,
+    github: githubIconSvg,
+    gitlab: gitlabIconSvg,
+    jira: jiraIconSvg,
+    kubernetes: kubernetesIconSvg,
+    linear: linearIconSvg,
+    netlify: netlifyIconSvg,
+    notion: notionIconSvg,
+    postgresql: postgresqlIconSvg,
+    sentry: sentryIconSvg,
+    stripe: stripeIconSvg,
+    supabase: supabaseIconSvg,
+    trello: trelloIconSvg,
+    vercel: vercelIconSvg,
+  }).flatMap(([iconKey, svg]) => {
+    const path = extractSimpleIconPath(svg);
+    return path ? [[iconKey, path] as const] : [];
+  }),
+);
+const simpleIconKeys = new Set(simpleIconPathByKey.keys());
+
+function SimpleBrandIcon(props: { iconKey: string; className?: string | undefined }) {
+  const { iconKey, className } = props;
+  const path = simpleIconPathByKey.get(iconKey);
+
+  if (!path) {
+    return <WrenchIcon className={className} />;
+  }
+
+  return (
+    <svg aria-hidden="true" className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d={path} />
+    </svg>
+  );
+}
+
 function workEntryPreview(
   workEntry: Pick<TimelineWorkEntry, "detail" | "command" | "changedFiles">,
   workspaceRoot: string | undefined,
@@ -1129,29 +1208,41 @@ function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
-function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
-  if (workEntry.requestKind === "command") return TerminalIcon;
-  if (workEntry.requestKind === "file-read") return EyeIcon;
-  if (workEntry.requestKind === "file-change") return SquarePenIcon;
+type WorkEntryIcon = ComponentType<{ className?: string }>;
+
+interface WorkEntryIconConfig {
+  icon: WorkEntryIcon;
+  iconKey?: string | undefined;
+}
+
+function workEntryIcon(workEntry: TimelineWorkEntry): WorkEntryIconConfig {
+  if (workEntry.requestKind === "command") return { icon: TerminalIcon };
+  if (workEntry.requestKind === "file-read") return { icon: EyeIcon };
+  if (workEntry.requestKind === "file-change") return { icon: SquarePenIcon };
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
-    return TerminalIcon;
+    return { icon: TerminalIcon };
   }
   if (workEntry.itemType === "file_change" || (workEntry.changedFiles?.length ?? 0) > 0) {
-    return SquarePenIcon;
+    return { icon: SquarePenIcon };
   }
-  if (workEntry.itemType === "web_search") return GlobeIcon;
-  if (workEntry.itemType === "image_view") return EyeIcon;
+  if (workEntry.itemType === "web_search") return { icon: GlobeIcon };
+  if (workEntry.itemType === "image_view") return { icon: EyeIcon };
 
   switch (workEntry.itemType) {
-    case "mcp_tool_call":
-      return WrenchIcon;
+    case "mcp_tool_call": {
+      const providerIcon = resolveProviderIconReference(workEntry.toolServer, simpleIconKeys);
+      if (providerIcon?.type === "simple-icon") {
+        return { icon: WrenchIcon, iconKey: providerIcon.iconKey };
+      }
+      return { icon: WrenchIcon };
+    }
     case "dynamic_tool_call":
     case "collab_agent_tool_call":
-      return HammerIcon;
+      return { icon: HammerIcon };
   }
 
-  return workToneIcon(workEntry.tone).icon;
+  return { icon: workToneIcon(workEntry.tone).icon };
 }
 
 function capitalizePhrase(value: string): string {
@@ -1162,11 +1253,16 @@ function capitalizePhrase(value: string): string {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
 }
 
+function formatToolDisplayName(value: string): string {
+  return capitalizePhrase(normalizeCompactToolLabel(value).replace(/[_-]+/g, " "));
+}
+
 function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  if (!workEntry.toolTitle) {
-    return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
+  const action = formatToolDisplayName(workEntry.toolTitle ?? workEntry.label);
+  if (workEntry.itemType === "mcp_tool_call" && workEntry.toolServer) {
+    return `${formatToolDisplayName(workEntry.toolServer)} MCP - ${action}`;
   }
-  return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
+  return action;
 }
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
@@ -1175,7 +1271,8 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
 }) {
   const { workEntry, workspaceRoot } = props;
   const iconConfig = workToneIcon(workEntry.tone);
-  const EntryIcon = workEntryIcon(workEntry);
+  const entryIconConfig = workEntryIcon(workEntry);
+  const EntryIcon = entryIconConfig.icon;
   const heading = toolWorkEntryHeading(workEntry);
   const rawPreview = workEntryPreview(workEntry, workspaceRoot);
   const preview =
@@ -1188,14 +1285,41 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
+  const [isOutputExpanded, setIsOutputExpanded] = useState(false);
+  const output = workEntry.output?.trimEnd();
+  const hasOutput = output !== undefined && output.trim().length > 0;
 
   return (
     <div className="rounded-lg px-1 py-1">
-      <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
+      <div
+        className={cn(
+          "flex items-center gap-2 transition-[opacity,translate] duration-200",
+          hasOutput ? "cursor-pointer rounded-md hover:bg-muted/25" : "",
+        )}
+        role={hasOutput ? "button" : undefined}
+        tabIndex={hasOutput ? 0 : undefined}
+        aria-expanded={hasOutput ? isOutputExpanded : undefined}
+        onClick={hasOutput ? () => setIsOutputExpanded((value) => !value) : undefined}
+        onKeyDown={
+          hasOutput
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                  return;
+                }
+                event.preventDefault();
+                setIsOutputExpanded((value) => !value);
+              }
+            : undefined
+        }
+      >
         <span
           className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
         >
-          <EntryIcon className="size-3" />
+          {entryIconConfig.iconKey ? (
+            <SimpleBrandIcon className="size-3" iconKey={entryIconConfig.iconKey} />
+          ) : (
+            <EntryIcon className="size-3" />
+          )}
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
           {rawCommand ? (
@@ -1284,6 +1408,13 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               +{(workEntry.changedFiles?.length ?? 0) - 4}
             </span>
           )}
+        </div>
+      )}
+      {hasOutput && isOutputExpanded && (
+        <div className="mt-1 pl-6">
+          <pre className="max-h-72 overflow-auto rounded-lg border border-border/55 bg-muted/35 px-3 py-2 font-mono text-[11px] leading-5 text-foreground/80 whitespace-pre">
+            {output}
+          </pre>
         </div>
       )}
     </div>

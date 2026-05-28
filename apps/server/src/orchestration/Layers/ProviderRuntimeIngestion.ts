@@ -42,6 +42,17 @@ const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${t
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
   CommandId.make(`provider:${event.eventId}:${tag}:${crypto.randomUUID()}`);
 
+function toolOutputKey(
+  threadId: ThreadId,
+  itemId: string | undefined,
+  streamKind: "command_output" | "file_change_output",
+): string | undefined {
+  if (!itemId) {
+    return undefined;
+  }
+  return `${threadId}:${itemId}:${streamKind}`;
+}
+
 interface AssistantSegmentState {
   baseKey: string;
   nextSegmentIndex: number;
@@ -54,7 +65,10 @@ const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_CACHE_CAPACITY = 20_000;
 const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_TTL = Duration.minutes(120);
 const BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY = 10_000;
 const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
+const BUFFERED_TOOL_OUTPUT_BY_ITEM_CACHE_CAPACITY = 10_000;
+const BUFFERED_TOOL_OUTPUT_BY_ITEM_TTL = Duration.minutes(120);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
+const MAX_BUFFERED_TOOL_OUTPUT_CHARS = 64_000;
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.T3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
 
 type TurnStartRequestedDomainEvent = Extract<
@@ -640,6 +654,12 @@ const make = Effect.gen(function* () {
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
   });
 
+  const bufferedToolOutputByItem = yield* Cache.make<string, string>({
+    capacity: BUFFERED_TOOL_OUTPUT_BY_ITEM_CACHE_CAPACITY,
+    timeToLive: BUFFERED_TOOL_OUTPUT_BY_ITEM_TTL,
+    lookup: () => Effect.succeed(""),
+  });
+
   const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (threadId: ThreadId) {
     return yield* projectionSnapshotQuery
       .getThreadDetailById(threadId)
@@ -1064,6 +1084,7 @@ const make = Effect.gen(function* () {
       const turnKeys = Array.from(yield* Cache.keys(turnMessageIdsByTurnKey));
       const assistantSegmentKeys = Array.from(yield* Cache.keys(assistantSegmentStateByTurnKey));
       const proposedPlanKeys = Array.from(yield* Cache.keys(bufferedProposedPlanById));
+      const toolOutputKeys = Array.from(yield* Cache.keys(bufferedToolOutputByItem));
       yield* Effect.forEach(
         turnKeys,
         (key) =>
@@ -1097,6 +1118,12 @@ const make = Effect.gen(function* () {
           key.startsWith(proposedPlanPrefix)
             ? Cache.invalidate(bufferedProposedPlanById, key)
             : Effect.void,
+        { concurrency: 1 },
+      ).pipe(Effect.asVoid);
+      yield* Effect.forEach(
+        toolOutputKeys,
+        (key) =>
+          key.startsWith(prefix) ? Cache.invalidate(bufferedToolOutputByItem, key) : Effect.void,
         { concurrency: 1 },
       ).pipe(Effect.asVoid);
     });
@@ -1146,6 +1173,57 @@ const make = Effect.gen(function* () {
     return yield* getSourceProposedPlanReferenceForPendingTurnStart(threadId);
   });
 
+  const appendBufferedToolOutput = (event: ProviderRuntimeEvent) =>
+    Effect.gen(function* () {
+      if (
+        event.type !== "content.delta" ||
+        (event.payload.streamKind !== "command_output" &&
+          event.payload.streamKind !== "file_change_output")
+      ) {
+        return;
+      }
+
+      const key = toolOutputKey(event.threadId, event.itemId, event.payload.streamKind);
+      if (!key) {
+        return;
+      }
+
+      const current = yield* Cache.getOption(bufferedToolOutputByItem, key).pipe(
+        Effect.map(Option.getOrElse(() => "")),
+      );
+      const next = current + event.payload.delta;
+      yield* Cache.set(
+        bufferedToolOutputByItem,
+        key,
+        next.length > MAX_BUFFERED_TOOL_OUTPUT_CHARS
+          ? next.slice(next.length - MAX_BUFFERED_TOOL_OUTPUT_CHARS)
+          : next,
+      );
+    });
+
+  const takeBufferedToolOutput = (event: ProviderRuntimeEvent): Effect.Effect<string | undefined> =>
+    Effect.gen(function* () {
+      if (event.type !== "item.completed") {
+        return undefined;
+      }
+      const streamKind =
+        event.payload.itemType === "command_execution"
+          ? "command_output"
+          : event.payload.itemType === "file_change"
+            ? "file_change_output"
+            : undefined;
+      const key = streamKind ? toolOutputKey(event.threadId, event.itemId, streamKind) : undefined;
+      if (!key) {
+        return undefined;
+      }
+      const output = yield* Cache.getOption(bufferedToolOutputByItem, key).pipe(
+        Effect.map(Option.getOrUndefined),
+      );
+      yield* Cache.invalidate(bufferedToolOutputByItem, key);
+      const trimmed = output?.trimEnd();
+      return trimmed && trimmed.length > 0 ? trimmed : undefined;
+    });
+
   const markSourceProposedPlanImplemented = Effect.fn("markSourceProposedPlanImplemented")(
     function* (
       sourceThreadId: ThreadId,
@@ -1194,6 +1272,7 @@ const make = Effect.gen(function* () {
       const now = event.createdAt;
       const eventTurnId = toTurnId(event.turnId);
       const activeTurnId = thread.session?.activeTurnId ?? null;
+      yield* appendBufferedToolOutput(event);
 
       const conflictsWithActiveTurn =
         activeTurnId !== null && eventTurnId !== undefined && !sameId(activeTurnId, eventTurnId);
@@ -1611,13 +1690,25 @@ const make = Effect.gen(function* () {
         }
       }
 
+      const completedToolOutput = yield* takeBufferedToolOutput(event);
       const activities = runtimeEventToActivities(event);
       yield* Effect.forEach(activities, (activity) =>
         orchestrationEngine.dispatch({
           type: "thread.activity.append",
           commandId: providerCommandId(event, "thread-activity-append"),
           threadId: thread.id,
-          activity,
+          activity:
+            completedToolOutput && activity.kind === "tool.completed"
+              ? {
+                  ...activity,
+                  payload: {
+                    ...(activity.payload && typeof activity.payload === "object"
+                      ? (activity.payload as Record<string, unknown>)
+                      : {}),
+                    output: completedToolOutput,
+                  },
+                }
+              : activity,
           createdAt: activity.createdAt,
         }),
       ).pipe(Effect.asVoid);
