@@ -107,6 +107,7 @@ import { formatProviderSkillDisplayName } from "../../providerSkillPresentation"
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { runtimeModeConfig, runtimeModeOptionsForProvider } from "./runtimeModePresentation";
+import { resolveUnsupportedRuntimeModeForProvider } from "../../runtimeModeDefaults";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
@@ -471,7 +472,7 @@ export interface ChatComposerProps {
 
   onProviderModelSelect: (instanceId: ProviderInstanceId, model: string) => void;
   toggleInteractionMode: () => void;
-  handleRuntimeModeChange: (mode: RuntimeMode) => void;
+  handleRuntimeModeChange: (mode: RuntimeMode, options?: { persistSticky?: boolean }) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
   togglePlanSidebar: () => void;
 
@@ -750,10 +751,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => runtimeModeOptionsForProvider(selectedProvider),
     [selectedProvider],
   );
-  const effectiveRuntimeMode =
-    runtimeMode === "codex-auto-review" && selectedProvider !== "codex"
-      ? "auto-accept-edits"
-      : runtimeMode;
+  const effectiveRuntimeMode = resolveUnsupportedRuntimeModeForProvider({
+    runtimeMode,
+    supportsCodexAutoReview: selectedProvider === "codex",
+  });
   const selectedModelSelection = useMemo<ModelSelection>(
     () => createModelSelection(selectedInstanceId, selectedModel, selectedModelOptionsForDispatch),
     [selectedInstanceId, selectedModel, selectedModelOptionsForDispatch],
@@ -763,7 +764,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (runtimeMode !== "codex-auto-review" || selectedProvider === "codex") {
       return;
     }
-    handleRuntimeModeChange("auto-accept-edits");
+    handleRuntimeModeChange("approval-required", { persistSticky: false });
   }, [handleRuntimeModeChange, runtimeMode, selectedProvider]);
   const selectedModelForPicker = selectedModel;
   // Instance-keyed option list so the picker can show each configured

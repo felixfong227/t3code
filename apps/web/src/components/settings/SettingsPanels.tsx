@@ -12,7 +12,10 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_UNIFIED_SETTINGS,
+  type DefaultThreadRuntimeModePreference,
+} from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
@@ -25,6 +28,7 @@ import {
   resolveDesktopUpdateButtonAction,
 } from "../../components/desktopUpdate.logic";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { runtimeModeConfig } from "../chat/runtimeModePresentation";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { isElectron } from "../../env";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
@@ -98,6 +102,52 @@ const TIMESTAMP_FORMAT_LABELS = {
   "12-hour": "12-hour",
   "24-hour": "24-hour",
 } as const;
+
+const DEFAULT_THREAD_RUNTIME_MODE_LABELS: Record<DefaultThreadRuntimeModePreference, string> = {
+  "follow-last": "Follow last thread (Default)",
+  "approval-required": runtimeModeConfig["approval-required"].label,
+  "codex-auto-review": runtimeModeConfig["codex-auto-review"].label,
+  "auto-accept-edits": runtimeModeConfig["auto-accept-edits"].label,
+  "full-access": runtimeModeConfig["full-access"].label,
+};
+
+const DEFAULT_THREAD_RUNTIME_MODE_OPTIONS: ReadonlyArray<{
+  value: DefaultThreadRuntimeModePreference;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "follow-last",
+    label: DEFAULT_THREAD_RUNTIME_MODE_LABELS["follow-last"],
+    description: "Reuse the access mode selected most recently.",
+  },
+  {
+    value: "approval-required",
+    label: runtimeModeConfig["approval-required"].label,
+    description: runtimeModeConfig["approval-required"].description,
+  },
+  {
+    value: "codex-auto-review",
+    label: runtimeModeConfig["codex-auto-review"].label,
+    description: runtimeModeConfig["codex-auto-review"].description,
+  },
+  {
+    value: "auto-accept-edits",
+    label: runtimeModeConfig["auto-accept-edits"].label,
+    description: runtimeModeConfig["auto-accept-edits"].description,
+  },
+  {
+    value: "full-access",
+    label: runtimeModeConfig["full-access"].label,
+    description: runtimeModeConfig["full-access"].description,
+  },
+];
+
+function isDefaultThreadRuntimeModePreference(
+  value: string | null | undefined,
+): value is DefaultThreadRuntimeModePreference {
+  return DEFAULT_THREAD_RUNTIME_MODE_OPTIONS.some((option) => option.value === value);
+}
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
 
@@ -415,6 +465,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? ["New thread mode"]
         : []),
+      ...(settings.defaultThreadRuntimeMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadRuntimeMode
+        ? ["New thread permissions"]
+        : []),
       ...(settings.pullRequestTargetRemotePreference !==
       DEFAULT_UNIFIED_SETTINGS.pullRequestTargetRemotePreference
         ? ["Pull request target"]
@@ -437,6 +490,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
+      settings.defaultThreadRuntimeMode,
       settings.pullRequestTargetRemotePreference,
       settings.diffIgnoreWhitespace,
       settings.diffWordWrap,
@@ -468,6 +522,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
+      defaultThreadRuntimeMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadRuntimeMode,
       pullRequestTargetRemotePreference: DEFAULT_UNIFIED_SETTINGS.pullRequestTargetRemotePreference,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
@@ -737,6 +792,57 @@ export function GeneralSettingsPanel() {
                 <SelectItem hideIndicator value="worktree">
                   New worktree
                 </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          title="New thread permissions"
+          description="Pick the default access mode for newly created draft threads."
+          resetAction={
+            settings.defaultThreadRuntimeMode !==
+            DEFAULT_UNIFIED_SETTINGS.defaultThreadRuntimeMode ? (
+              <SettingResetButton
+                label="new thread permissions"
+                onClick={() =>
+                  updateSettings({
+                    defaultThreadRuntimeMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadRuntimeMode,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.defaultThreadRuntimeMode}
+              onValueChange={(value) => {
+                if (isDefaultThreadRuntimeModePreference(value)) {
+                  updateSettings({ defaultThreadRuntimeMode: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-56" aria-label="Default thread permissions">
+                <SelectValue>
+                  {DEFAULT_THREAD_RUNTIME_MODE_LABELS[settings.defaultThreadRuntimeMode]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {DEFAULT_THREAD_RUNTIME_MODE_OPTIONS.map((option) => (
+                  <SelectItem
+                    hideIndicator
+                    key={option.value}
+                    value={option.value}
+                    className="min-w-64 py-2"
+                  >
+                    <div className="grid gap-0.5">
+                      <span className="font-medium">{option.label}</span>
+                      <span className="text-muted-foreground text-xs leading-4">
+                        {option.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectPopup>
             </Select>
           }
