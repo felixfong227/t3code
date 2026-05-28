@@ -2794,6 +2794,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([
                 {
                   number: 2305,
@@ -2865,6 +2867,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         ghScenario: {
           prListSequenceByRepositoryAndHeadSelector: {
             "felixfong227/t3code\0felix/integrate-pr-2305-1003": [
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify([]),
               // @effect-diagnostics-next-line preferSchemaOverJson:off
