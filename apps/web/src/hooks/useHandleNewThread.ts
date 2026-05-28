@@ -48,6 +48,7 @@ function useNewThreadState() {
         applyStickyState,
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
+        setRuntimeMode,
         stickyRuntimeMode,
       } = useComposerDraftStore.getState();
       const currentRouteTarget = getCurrentRouteTarget();
@@ -134,6 +135,7 @@ function useNewThreadState() {
           envMode: options?.envMode ?? "local",
           runtimeMode,
         });
+        setRuntimeMode(draftId, runtimeMode, { persistSticky: false });
         applyStickyState(draftId);
 
         await router.navigate({

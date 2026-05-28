@@ -1581,6 +1581,21 @@ describe("composerDraftStore runtime and interaction settings", () => {
     expect(draftFor(explicitThreadId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe("full-access");
   });
 
+  it("preserves a preference-resolved runtime mode when sticky state is applied", () => {
+    const store = useComposerDraftStore.getState();
+    const seedThreadId = ThreadId.make("thread-seed-preference-runtime");
+    const seedThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, seedThreadId);
+    const draftId = ThreadId.make("thread-preference-runtime");
+    const draftRef = scopeThreadRef(TEST_ENVIRONMENT_ID, draftId);
+
+    store.setRuntimeMode(seedThreadRef, "full-access");
+    store.setRuntimeMode(draftRef, "approval-required", { persistSticky: false });
+    store.applyStickyState(draftRef);
+
+    expect(draftFor(draftId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe("approval-required");
+    expect(useComposerDraftStore.getState().stickyRuntimeMode).toBe("full-access");
+  });
+
   it("stores interaction mode overrides in the composer draft", () => {
     const store = useComposerDraftStore.getState();
 
