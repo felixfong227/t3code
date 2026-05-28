@@ -11,7 +11,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ServerConfig } from "../../config.ts";
 import { getTelemetryIdentifier } from "../Identify.ts";
 import { AnalyticsService } from "../Services/AnalyticsService.ts";
-import { AnalyticsServiceLayerLive } from "./AnalyticsService.ts";
+import {
+  AnalyticsServiceLayerLive,
+  DEFAULT_POSTHOG_HOST,
+  DEFAULT_POSTHOG_KEY,
+} from "./AnalyticsService.ts";
 
 interface RecordedBatchRequest {
   readonly path: string;
@@ -37,6 +41,11 @@ interface RecordedBatchBody {
 }
 
 it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
+  it("uses the fork PostHog project as the packaged default", () => {
+    assert.equal(DEFAULT_POSTHOG_KEY, "phc_vLoa5JGYRNzj7EaDbtKu4bqfe5p6u98cDWNvSpkynmW5");
+    assert.equal(DEFAULT_POSTHOG_HOST, "https://eu.i.posthog.com");
+  });
+
   it.effect("flush drains all buffered events across multiple batches", () =>
     Effect.gen(function* () {
       const capturedRequests: Array<RecordedBatchRequest> = [];

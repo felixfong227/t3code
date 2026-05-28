@@ -21,6 +21,16 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopUpdateChannel("0.0.17"), "latest");
   });
 
+  it("keeps fork date-suffixed release versions on the latest updater channel", () => {
+    assert.equal(resolveDesktopUpdateChannel("0.0.24-20260528.1"), "latest");
+    assert.equal(resolveDesktopProductName("0.0.24-20260528.1"), "T3 Code (Alpha)");
+    assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.24-20260528.1"), {
+      macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
+    });
+  });
+
   it("switches desktop packaging product names to nightly for nightly builds", () => {
     assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
