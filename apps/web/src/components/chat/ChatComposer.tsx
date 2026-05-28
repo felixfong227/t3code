@@ -730,9 +730,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         model: selectedModel,
         models: selectedProviderModels,
         prompt,
-        modelOptions: composerModelOptions?.[selectedProvider],
+        modelOptions: composerModelOptions?.[selectedInstanceId],
       }),
-    [composerModelOptions, prompt, selectedModel, selectedProvider, selectedProviderModels],
+    [
+      composerModelOptions,
+      prompt,
+      selectedInstanceId,
+      selectedModel,
+      selectedProvider,
+      selectedProviderModels,
+    ],
   );
 
   const selectedPromptEffort = composerProviderState.promptEffort;
@@ -1038,21 +1045,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const providerTraitsMenuContent = renderProviderTraitsMenuContent({
     provider: selectedProvider,
+    instanceId: selectedInstanceId,
     ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
     ...(routeKind === "draft" && draftId ? { draftId } : {}),
     model: selectedModel,
     models: selectedProviderModels,
-    modelOptions: composerModelOptions?.[selectedProvider],
+    modelOptions: composerModelOptions?.[selectedInstanceId],
     prompt,
     onPromptChange: setPromptFromTraits,
   });
   const providerTraitsPicker = renderProviderTraitsPicker({
     provider: selectedProvider,
+    instanceId: selectedInstanceId,
     ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
     ...(routeKind === "draft" && draftId ? { draftId } : {}),
     model: selectedModel,
     models: selectedProviderModels,
-    modelOptions: composerModelOptions?.[selectedProvider],
+    modelOptions: composerModelOptions?.[selectedInstanceId],
     prompt,
     onPromptChange: setPromptFromTraits,
   });
