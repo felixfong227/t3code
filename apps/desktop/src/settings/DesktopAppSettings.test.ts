@@ -98,6 +98,16 @@ describe("DesktopSettings", () => {
     } satisfies DesktopSettingsValue);
   });
 
+  it("defaults fork date-suffixed release builds to the latest update channel", () => {
+    assert.deepEqual(resolveDefaultDesktopSettings("0.0.24-20260528.1"), {
+      serverExposureMode: "local-only",
+      tailscaleServeEnabled: false,
+      tailscaleServePort: 443,
+      updateChannel: "latest",
+      updateChannelConfiguredByUser: false,
+    } satisfies DesktopSettingsValue);
+  });
+
   it.effect("loads persisted settings and applies semantic updates", () =>
     withSettings(
       Effect.gen(function* () {

@@ -25,13 +25,23 @@ interface BufferedAnalyticsEvent {
   readonly capturedAt: string;
 }
 
+const UPSTREAM_POSTHOG_KEY = "phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m";
+const UPSTREAM_POSTHOG_HOST = "https://us.i.posthog.com";
+
+const trimNonEmpty = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const DEFAULT_POSTHOG_KEY =
+  trimNonEmpty(packageJson.t3code?.telemetry?.posthogKey) ?? UPSTREAM_POSTHOG_KEY;
+
+export const DEFAULT_POSTHOG_HOST =
+  trimNonEmpty(packageJson.t3code?.telemetry?.posthogHost) ?? UPSTREAM_POSTHOG_HOST;
+
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.string("T3CODE_POSTHOG_KEY").pipe(
-    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
-  ),
-  posthogHost: Config.string("T3CODE_POSTHOG_HOST").pipe(
-    Config.withDefault("https://us.i.posthog.com"),
-  ),
+  posthogKey: Config.string("T3CODE_POSTHOG_KEY").pipe(Config.withDefault(DEFAULT_POSTHOG_KEY)),
+  posthogHost: Config.string("T3CODE_POSTHOG_HOST").pipe(Config.withDefault(DEFAULT_POSTHOG_HOST)),
   enabled: Config.boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true)),
   flushBatchSize: Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
   maxBufferedEvents: Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(

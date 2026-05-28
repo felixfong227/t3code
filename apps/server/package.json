@@ -50,5 +50,11 @@
   },
   "engines": {
     "node": "^22.16 || ^23.11 || >=24.10"
+  },
+  "t3code": {
+    "telemetry": {
+      "posthogKey": "phc_vLoa5JGYRNzj7EaDbtKu4bqfe5p6u98cDWNvSpkynmW5",
+      "posthogHost": "https://eu.i.posthog.com"
+    }
   }
 }

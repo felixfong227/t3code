@@ -13,6 +13,9 @@ permissions:
   actions: read
   contents: write
 
+env:
+  T3CODE_DESKTOP_UPDATE_REPOSITORY: felixfong227/t3code
+
 concurrency:
   group: fork-release
   cancel-in-progress: false
