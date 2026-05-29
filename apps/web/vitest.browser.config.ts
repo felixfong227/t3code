@@ -23,7 +23,7 @@ export default mergeConfig(
       include: ["src/components/**/*.browser.tsx"],
       browser: {
         enabled: true,
-        provider: playwright(),
+        provider: playwright(process.env.CI ? { launchOptions: { channel: "chrome" } } : {}),
         instances: [{ browser: "chromium" }],
         headless: true,
         api: {
