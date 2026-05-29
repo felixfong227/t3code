@@ -93,7 +93,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
@@ -102,11 +102,9 @@
     "git-url-parse": "^16.1.0"
   },
   "devDependencies": {
-    "@effect/language-service": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

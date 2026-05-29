@@ -43,6 +43,7 @@ import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
+import { __resetClientSettingsPersistenceForTests } from "../hooks/useSettings";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   removeInlineTerminalContextPlaceholder,
@@ -54,6 +55,7 @@ import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
 import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
+import { FIRST_RUN_THREAD_RUNTIME_MODE } from "../runtimeModeDefaults";
 import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
@@ -1717,6 +1719,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     await __resetLocalApiForTests();
     await setViewport(DEFAULT_VIEWPORT);
     localStorage.clear();
+    __resetClientSettingsPersistenceForTests();
     document.body.innerHTML = "";
     wsRequests.length = 0;
     customWsRpcResolver = null;
@@ -1730,6 +1733,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
+      stickyRuntimeMode: null,
     });
     useCommandPaletteStore.setState({
       open: false,
@@ -4175,7 +4179,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("falls back to defaults when no sticky composer settings exist", async () => {
+  it("uses the first-run runtime default when no sticky composer settings exist", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -4197,7 +4201,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const newDraftId = draftIdFromPath(newThreadPath);
 
-      expect(composerDraftFor(newDraftId)).toBe(undefined);
+      expect(composerDraftFor(newDraftId)).toMatchObject({
+        activeProvider: null,
+        modelSelectionByProvider: {},
+        runtimeMode: FIRST_RUN_THREAD_RUNTIME_MODE,
+      });
     } finally {
       await mounted.cleanup();
     }
