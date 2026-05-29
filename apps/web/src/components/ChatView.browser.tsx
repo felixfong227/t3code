@@ -1730,6 +1730,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
+      stickyRuntimeMode: null,
     });
     useCommandPaletteStore.setState({
       open: false,
